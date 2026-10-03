@@ -4,7 +4,12 @@ main.py
 Entry point for the F1 Pit Stop HMM project.
 
 Usage:
-    python main.py
+    python main.py                        # uses default RACES list below
+    python main.py --year 2022            # all default GPs for a specific year
+    python main.py --year 2021 --gp Spa Monaco Silverstone
+
+FastF1 supports seasons from 2018 onwards reliably.
+Available years: 2018 – 2024 (2025 partial, depending on FastF1 updates)
 
 This script:
     1. Loads F1 race data via FastF1
@@ -16,6 +21,7 @@ This script:
 """
 
 import os
+import argparse
 import numpy as np
 import pandas as pd
 
@@ -29,12 +35,33 @@ from src.evaluate import (
     summarize_results
 )
 
+# ── Argument parsing ──────────────────────────────────────────────────
+parser = argparse.ArgumentParser(description='F1 Pit Stop HMM')
+parser.add_argument('--year', type=int, default=None,
+                    help='Season year (2018–2024). Overrides RACES list.')
+parser.add_argument('--gp', nargs='+', default=None,
+                    help='Grand Prix names e.g. --gp Bahrain Monaco Spa')
+args = parser.parse_args()
+
 # ── Config ────────────────────────────────────────────────────────────
-RACES = [
+# Default races — edit freely or override via CLI flags above
+DEFAULT_RACES = [
     (2023, 'Bahrain'),
     (2023, 'Australia'),
     (2023, 'Monaco'),
 ]
+
+# Default GPs used when --year is passed without --gp
+DEFAULT_GPS = ['Bahrain', 'Australia', 'Monaco', 'Silverstone', 'Spa']
+
+if args.year and args.gp:
+    RACES = [(args.year, gp) for gp in args.gp]
+elif args.year:
+    RACES = [(args.year, gp) for gp in DEFAULT_GPS]
+else:
+    RACES = DEFAULT_RACES
+
+print(f"Races to load: {RACES}")
 RESULTS_DIR = 'results'
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
@@ -156,4 +183,4 @@ summary = summarize_results(all_results)
 summary.to_csv(os.path.join(RESULTS_DIR, 'evaluation_summary.csv'), index=False)
 
 print(f"\nAll outputs saved to '{RESULTS_DIR}/'")
-print("Done! 🏎️")
+print("Done!")
