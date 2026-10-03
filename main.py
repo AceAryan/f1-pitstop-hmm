@@ -263,11 +263,11 @@ def run_evaluate(smooth=3, tolerance=2, drivers=None, plot_drivers=None):
 
             scaled = scalers[key].transform(seq)
             raw    = models[key].viterbi(scaled)
-            smooth = smooth_states(raw, window=smooth)
-            pits   = predict_pits_from_states(smooth)
+            smoothed_states = smooth_states(raw, window=smooth)
+            pits   = predict_pits_from_states(smoothed_states)
 
             predicted.extend([p + offset for p in pits])
-            state_trace.extend(smooth.tolist())
+            state_trace.extend(smoothed_states.tolist())
             offset += len(seq)
 
         metrics = eval_metrics(predicted, actual_pits, tolerance)
