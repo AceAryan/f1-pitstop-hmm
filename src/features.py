@@ -63,7 +63,7 @@ def compute_rolling_degradation(df: pd.DataFrame, window: int = 3) -> pd.DataFra
         )
         return group
 
-    df = df.groupby('Driver', group_keys=False).apply(rolling_per_driver)
+    df = df.groupby('Driver', group_keys=False).apply(rolling_per_driver, include_groups=False)
     return df
 
 
@@ -128,6 +128,7 @@ def get_driver_sequences(df: pd.DataFrame, driver: str) -> tuple:
     Returns:
         sequences : list of np.arrays, shape (n_laps, n_features) per stint
         pit_laps  : list of pit lap numbers for this driver
+        compounds : list of compound strings per stint e.g. ['SOFT', 'MEDIUM']
     """
     feature_cols = ['lap_time_delta', 'sector3_delta', 'rolling_degradation', 'tyre_age_norm']
 
@@ -135,13 +136,44 @@ def get_driver_sequences(df: pd.DataFrame, driver: str) -> tuple:
     pit_laps = driver_df[driver_df['is_pit_lap'] == 1]['LapNumber'].tolist()
 
     sequences = []
+    compounds = []
     for stint_id, stint_df in driver_df.groupby('Stint'):
         stint_df = stint_df.sort_values('LapNumber')
         obs = stint_df[feature_cols].values.astype(np.float64)
         if len(obs) >= 3:  # Skip very short stints
             sequences.append(obs)
+            # Most common compound in this stint
+            if 'Compound' in stint_df.columns:
+                compound = stint_df['Compound'].mode()[0]
+            else:
+                compound = 'UNKNOWN'
+            compounds.append(str(compound).upper())
 
-    return sequences, pit_laps
+    return sequences, pit_laps, compounds
+
+
+def get_sequences_by_compound(df: pd.DataFrame) -> dict:
+    """
+    Group all driver stints by tyre compound.
+    Returns dict: { 'SOFT': [seq1, seq2, ...], 'MEDIUM': [...], 'HARD': [...] }
+
+    This allows training a separate HMM per compound, since degradation
+    rates differ significantly across Soft/Medium/Hard.
+    """
+    compound_seqs = {}
+
+    for driver in df['Driver'].unique():
+        seqs, _, compounds = get_driver_sequences(df, driver)
+        for seq, compound in zip(seqs, compounds):
+            compound = compound if compound in ('SOFT', 'MEDIUM', 'HARD') else 'MEDIUM'
+            if compound not in compound_seqs:
+                compound_seqs[compound] = []
+            compound_seqs[compound].append(seq)
+
+    for compound, seqs in compound_seqs.items():
+        print(f"  {compound}: {len(seqs)} stints")
+
+    return compound_seqs
 
 
 def scale_features(sequences: list) -> tuple:
