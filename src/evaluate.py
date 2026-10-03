@@ -29,13 +29,13 @@ from src.features import get_driver_sequences
 from src.hmm import STATE_NAMES
 
 # ── CLI ───────────────────────────────────────────────────────────────
-parser = argparse.ArgumentParser(description='F1 HMM — Evaluation')
+parser = argparse.ArgumentParser(description='F1 HMM - Evaluation')
 parser.add_argument('--data', type=str, default='data/processed.parquet')
 parser.add_argument('--models_dir', type=str, default='results/models')
 parser.add_argument('--smooth', type=int, default=3,
                     help='Consecutive CRITICAL laps needed before predicting pit (default 3)')
 parser.add_argument('--tolerance', type=int, default=2,
-                    help='Allowed lap difference for TP match (default ±2)')
+                    help='Allowed lap difference for TP match (default +/-2)')
 parser.add_argument('--drivers', nargs='+', default=None,
                     help='Specific drivers to evaluate (default: top 10 by lap count)')
 parser.add_argument('--plot_drivers', nargs='+', default=None,
@@ -46,7 +46,7 @@ os.makedirs('results/plots', exist_ok=True)
 
 # ── Load data ─────────────────────────────────────────────────────────
 print("=" * 60)
-print("EVALUATE — Loading data and models")
+print("EVALUATE - Loading data and models")
 print("=" * 60)
 
 if not os.path.exists(args.data):
@@ -138,7 +138,7 @@ plot_drivers = args.plot_drivers or drivers[:3]
 
 print(f"\nEvaluating {len(drivers)} drivers: {drivers}")
 print(f"State smoothing window: {args.smooth} laps")
-print(f"Pit prediction tolerance: ±{args.tolerance} laps\n")
+print(f"Pit prediction tolerance: +/-{args.tolerance} laps\n")
 
 # ── Evaluate each driver ──────────────────────────────────────────────
 all_results = []
@@ -223,7 +223,7 @@ for driver in drivers:
         plot_path = f'results/plots/states_{driver}.png'
         plt.savefig(plot_path, dpi=150, bbox_inches='tight')
         plt.close()
-        print(f"  Saved plot → {plot_path}")
+        print(f"  Saved plot -> {plot_path}")
 
 
 # ── Transition matrix heatmaps ────────────────────────────────────────
@@ -254,5 +254,5 @@ print(f"Mean Recall    : {results_df['Recall'].mean():.3f}")
 print(f"Mean F1        : {results_df['F1'].mean():.3f}")
 
 results_df.to_csv('results/evaluation_summary.csv', index=False)
-print(f"\nSaved → results/evaluation_summary.csv")
-print(f"Plots → results/plots/")
+print(f"\nSaved -> results/evaluation_summary.csv")
+print(f"Plots -> results/plots/")

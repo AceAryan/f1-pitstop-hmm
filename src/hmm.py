@@ -295,7 +295,7 @@ class GaussianHMM:
 
             # Convergence check
             delta_ll = total_ll - prev_ll
-            print(f"  Iter {iteration+1:3d} | log-likelihood: {total_ll:.4f} | Δ: {delta_ll:.6f}")
+            print(f"  Iter {iteration+1:3d} | log-likelihood: {total_ll:.4f} | delta: {delta_ll:.6f}")
 
             if abs(delta_ll) < self.tol and iteration > 5:
                 print(f"  Converged at iteration {iteration+1}.")
@@ -305,7 +305,7 @@ class GaussianHMM:
 
         print("Training complete.")
         print(f"\nLearned Transition Matrix A:\n{np.round(self.A, 3)}")
-        print(f"\nLearned Initial Distribution π: {np.round(self.pi, 3)}")
+        print(f"\nLearned Initial Distribution pi: {np.round(self.pi, 3)}")
 
     def _forward_with_scale(self, obs: np.ndarray, B: np.ndarray) -> tuple:
         """Forward pass returning scale factors (needed for backward pass)."""

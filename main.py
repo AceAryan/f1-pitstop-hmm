@@ -106,7 +106,7 @@ def run_preprocess(year=None, gp=None):
     feat_df = build_observation_matrix(raw_df)
 
     feat_df.to_csv(DATA_PATH, index=False)
-    print(f"Saved → {DATA_PATH}  ({feat_df.shape[0]} rows, {feat_df.shape[1]} cols)")
+    print(f"Saved -> {DATA_PATH}  ({feat_df.shape[0]} rows, {feat_df.shape[1]} cols)")
     if 'Compound' in feat_df.columns:
         print(f"Compounds: {feat_df['Compound'].value_counts().to_dict()}")
 
@@ -127,7 +127,7 @@ def run_train(compounds=None, n_iter=50, n_states=3):
     print("=" * 60)
 
     if not os.path.exists(DATA_PATH):
-        raise FileNotFoundError(f"{DATA_PATH} not found — run with --preprocess first.")
+        raise FileNotFoundError(f"{DATA_PATH} not found - run with --preprocess first.")
 
     os.makedirs(MODELS_DIR, exist_ok=True)
 
@@ -140,7 +140,7 @@ def run_train(compounds=None, n_iter=50, n_states=3):
     for compound in compounds:
         seqs = compound_seqs.get(compound, [])
         if len(seqs) < 5:
-            print(f"\n[{compound}] Only {len(seqs)} stints — skipping (need ≥5)")
+            print(f"\n[{compound}] Only {len(seqs)} stints - skipping (need >= 5)")
             continue
 
         print(f"\n{'─'*60}")
@@ -154,7 +154,7 @@ def run_train(compounds=None, n_iter=50, n_states=3):
         path = os.path.join(MODELS_DIR, f'hmm_{compound.lower()}.pkl')
         with open(path, 'wb') as f:
             pickle.dump({'model': model, 'scaler': scaler}, f)
-        print(f"Saved → {path}")
+        print(f"Saved -> {path}")
 
         labels = ['FRESH', 'DEGR', 'CRIT']
         print(f"\n[{compound}] Transition Matrix A:")
@@ -163,7 +163,7 @@ def run_train(compounds=None, n_iter=50, n_states=3):
             row = "  ".join(f"{model.A[i,j]:6.3f}" for j in range(n_states))
             print(f"  {lbl:6}  {row}")
 
-    print(f"\nTraining complete → {MODELS_DIR}/")
+    print(f"\nTraining complete -> {MODELS_DIR}/")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -214,11 +214,11 @@ def run_evaluate(smooth=3, tolerance=2, drivers=None, plot_drivers=None):
 
     print("\n" + "=" * 60)
     print("STEP 3: EVALUATE")
-    print(f"Smooth={smooth} laps | Tolerance=±{tolerance} laps")
+    print(f"Smooth={smooth} laps | Tolerance=+/-{tolerance} laps")
     print("=" * 60)
 
     if not os.path.exists(DATA_PATH):
-        raise FileNotFoundError(f"{DATA_PATH} not found — run with --preprocess first.")
+        raise FileNotFoundError(f"{DATA_PATH} not found - run with --preprocess first.")
 
     os.makedirs(PLOTS_DIR, exist_ok=True)
     os.makedirs('results', exist_ok=True)
@@ -239,7 +239,7 @@ def run_evaluate(smooth=3, tolerance=2, drivers=None, plot_drivers=None):
             print(f"  Missing: {compound} (skipping those stints)")
 
     if not models:
-        raise RuntimeError("No models found — run with --train first.")
+        raise RuntimeError("No models found - run with --train first.")
 
     all_drivers = drivers or feat_df['Driver'].value_counts().head(10).index.tolist()
     plot_for    = plot_drivers or all_drivers[:3]
@@ -319,7 +319,7 @@ def run_evaluate(smooth=3, tolerance=2, drivers=None, plot_drivers=None):
             out = os.path.join(PLOTS_DIR, f'states_{driver}.png')
             plt.savefig(out, dpi=150, bbox_inches='tight')
             plt.close()
-            print(f"  Saved plot → {out}")
+            print(f"  Saved plot -> {out}")
 
     # ── Transition matrix heatmaps ────────────────────────────────────
     for compound, model in models.items():
@@ -347,8 +347,8 @@ def run_evaluate(smooth=3, tolerance=2, drivers=None, plot_drivers=None):
     print(f"Mean F1        : {results_df['F1'].mean():.3f}")
 
     results_df.to_csv(RESULTS_CSV, index=False)
-    print(f"\nSaved → {RESULTS_CSV}")
-    print(f"Plots → {PLOTS_DIR}/")
+    print(f"\nSaved -> {RESULTS_CSV}")
+    print(f"Plots -> {PLOTS_DIR}/")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -395,7 +395,7 @@ Examples:
     parser.add_argument('--smooth',       type=int,    default=3,
                         help='Consecutive CRITICAL laps before predicting pit (default 3)')
     parser.add_argument('--tolerance',    type=int,    default=2,
-                        help='Lap tolerance for TP match (default ±2)')
+                        help='Lap tolerance for TP match (default +/-2)')
     parser.add_argument('--drivers',      nargs='+',   default=None,
                         help='Driver codes to evaluate (default: top 10)')
     parser.add_argument('--plot_drivers', nargs='+',   default=None,

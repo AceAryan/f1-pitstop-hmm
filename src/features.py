@@ -54,16 +54,14 @@ def compute_rolling_degradation(df: pd.DataFrame, window: int = 3) -> pd.DataFra
     """
     df = df.copy()
 
-    def rolling_per_driver(group):
-        group = group.sort_values('LapNumber')
-        group['rolling_degradation'] = (
-            group['lap_time_delta']
-            .rolling(window=window, min_periods=1)
-            .mean()
-        )
-        return group
+    if 'lap_time_delta' not in df.columns:
+        df['rolling_degradation'] = 0.0
+        return df
 
-    df = df.groupby('Driver', group_keys=False).apply(rolling_per_driver, include_groups=False)
+    df['rolling_degradation'] = (
+        df.groupby('Driver', group_keys=False)['lap_time_delta']
+        .transform(lambda s: s.rolling(window=window, min_periods=1).mean())
+    )
     return df
 
 

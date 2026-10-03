@@ -18,7 +18,7 @@ from src.data_loader import load_race
 from src.features import build_observation_matrix
 
 # ── CLI ───────────────────────────────────────────────────────────────
-parser = argparse.ArgumentParser(description='F1 HMM — Preprocessing')
+parser = argparse.ArgumentParser(description='F1 HMM - Preprocessing')
 parser.add_argument('--year', type=int, default=None)
 parser.add_argument('--gp', nargs='+', default=None)
 args = parser.parse_args()
@@ -50,7 +50,7 @@ OUT_PATH = 'data/processed.parquet'
 
 # ── Load ──────────────────────────────────────────────────────────────
 print("=" * 60)
-print("PREPROCESS — Loading race data")
+print("PREPROCESS - Loading race data")
 print(f"Races: {RACES}")
 print("=" * 60)
 
@@ -74,7 +74,7 @@ feat_df = build_observation_matrix(raw_df)
 
 # ── Save ──────────────────────────────────────────────────────────────
 feat_df.to_parquet(OUT_PATH, index=False)
-print(f"\nSaved processed data → {OUT_PATH}")
+print(f"\nSaved processed data -> {OUT_PATH}")
 print(f"Shape: {feat_df.shape}")
 print(f"Columns: {list(feat_df.columns)}")
 print(f"Compounds: {feat_df['Compound'].value_counts().to_dict() if 'Compound' in feat_df.columns else 'N/A'}")
