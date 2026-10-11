@@ -1,203 +1,169 @@
-"""
-features.py
------------
-Feature engineering from raw lap data.
-Produces the observation matrix fed into the HMM.
-
-Observation vector per lap:
-    [lap_time_delta, tyre_age_norm, sector3_delta, rolling_degradation]
-"""
+"""Feature engineering and race/stint sequence construction."""
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 
-def compute_lap_time_delta(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    For each driver, compute how much slower each lap is
-    compared to their personal best lap time in that stint.
-
-    Δt = lap_time - min(lap_time for that driver & stint)
-    """
-    df = df.copy()
-
-    # Assign stint number: increments each time a driver pits
-    df['Stint'] = df.groupby('Driver')['is_pit_lap'].cumsum().shift(1).fillna(0).astype(int)
-
-    # Best time per driver per stint
-    best_times = df.groupby(['Driver', 'Stint'])['LapTime'].transform('min')
-    df['lap_time_delta'] = df['LapTime'] - best_times
-
-    return df
+FEATURE_COLUMNS = [
+    'lap_time_delta',
+    'sector3_delta',
+    'rolling_degradation',
+    'tyre_age_norm',
+]
+FEATURE_VERSION = 3
+MAX_LAP_TIME_RATIO = 1.35
+RACE_COLUMNS = ['Year', 'GrandPrix', 'Driver']
+STINT_COLUMNS = RACE_COLUMNS + ['Stint']
 
 
-def compute_sector3_delta(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Sector 3 time delta vs driver's best sector 3 in that stint.
-    Sector 3 is most sensitive to rear tyre wear.
-    """
-    df = df.copy()
-    if 'Sector3Time' not in df.columns:
-        df['sector3_delta'] = 0.0
-        return df
-
-    best_s3 = df.groupby(['Driver', 'Stint'])['Sector3Time'].transform('min')
-    df['sector3_delta'] = df['Sector3Time'] - best_s3
-    return df
+def _is_clean_lap(df: pd.DataFrame) -> pd.Series:
+    """Return laps suitable as model observations, excluding pit and non-green laps."""
+    accurate = df['IsAccurate'].fillna(False).astype(bool)
+    green = df['TrackStatus'].astype('string').eq('1').fillna(False)
+    no_pit_activity = df['PitInTime'].isna() & df['PitOutTime'].isna()
+    valid_lap_time = df['LapTime'].notna() & (df['LapTime'] > 0)
+    return accurate & green & no_pit_activity & valid_lap_time & df['Stint'].notna()
 
 
-def compute_rolling_degradation(df: pd.DataFrame, window: int = 3) -> pd.DataFrame:
-    """
-    Rolling mean of lap_time_delta over last `window` laps per driver.
-    Captures the trend of tyre degradation, not just instantaneous.
-    """
-    df = df.copy()
+def _actual_pits_by_stint(df: pd.DataFrame, eligible: pd.Series) -> pd.DataFrame:
+    """Associate each pit-in LapNumber with the last eligible stint observation before it."""
+    eligible_laps = df.loc[eligible, STINT_COLUMNS + ['LapNumber']]
+    pit_rows = df.loc[df['PitInTime'].notna(), RACE_COLUMNS + ['LapNumber']]
+    pit_events = []
 
-    if 'lap_time_delta' not in df.columns:
-        df['rolling_degradation'] = 0.0
-        return df
+    for race_key, events in pit_rows.groupby(RACE_COLUMNS, sort=False, dropna=False):
+        if not isinstance(race_key, tuple):
+            race_key = (race_key,)
+        race_mask = pd.Series(True, index=eligible_laps.index)
+        for column, value in zip(RACE_COLUMNS, race_key):
+            race_mask &= eligible_laps[column].eq(value)
+        race_laps = eligible_laps.loc[race_mask].sort_values('LapNumber')
 
-    df['rolling_degradation'] = (
-        df.groupby('Driver', group_keys=False)['lap_time_delta']
-        .transform(lambda s: s.rolling(window=window, min_periods=1).mean())
+        for event_lap in events['LapNumber'].dropna():
+            preceding = race_laps[race_laps['LapNumber'] < event_lap]
+            if preceding.empty:
+                continue
+            last_lap = preceding.iloc[-1]
+            pit_events.append({
+                **{column: last_lap[column] for column in RACE_COLUMNS},
+                'Stint': last_lap['Stint'],
+                'actual_pit_lap': event_lap,
+            })
+
+    if not pit_events:
+        return pd.DataFrame(columns=STINT_COLUMNS + ['actual_pit_lap'])
+
+    return (
+        pd.DataFrame(pit_events)
+        .groupby(STINT_COLUMNS, as_index=False, dropna=False)['actual_pit_lap']
+        .min()
     )
-    return df
-
-
-def normalize_tyre_age(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Normalize TyreLife to [0, 1] range within each compound type.
-    Different compounds have different expected lifespans.
-    """
-    df = df.copy()
-    if 'TyreLife' not in df.columns:
-        df['tyre_age_norm'] = 0.0
-        return df
-
-    # Approximate max laps per compound
-    compound_max = {'SOFT': 25, 'MEDIUM': 35, 'HARD': 50, 'INTERMEDIATE': 30, 'WET': 30}
-    default_max = 35
-
-    df['tyre_age_norm'] = df.apply(
-        lambda row: row['TyreLife'] / compound_max.get(str(row.get('Compound', '')), default_max),
-        axis=1
-    ).clip(0, 1)
-
-    return df
 
 
 def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Full feature engineering pipeline.
+    """Create clean lap observations while retaining real race and pit-lap metadata."""
+    required = set(
+        RACE_COLUMNS
+        + ['Stint', 'LapNumber', 'LapTime', 'Compound', 'TyreLife',
+           'PitInTime', 'PitOutTime', 'TrackStatus', 'IsAccurate']
+    )
+    missing = sorted(required.difference(df.columns))
+    if missing:
+        raise ValueError(f'Lap data is missing required FastF1 columns: {missing}')
 
-    Returns DataFrame with columns:
-        Driver, LapNumber, Stint, is_pit_lap,
-        lap_time_delta, sector3_delta, rolling_degradation, tyre_age_norm
-    """
-    df = df.copy()
+    raw = df.copy().reset_index(drop=True)
+    raw['LapNumber'] = pd.to_numeric(raw['LapNumber'], errors='coerce')
+    raw['Stint'] = pd.to_numeric(raw['Stint'], errors='coerce')
+    first_stint = raw.groupby(RACE_COLUMNS, sort=False)['Stint'].transform('min')
+    clean_laps = _is_clean_lap(raw)
+    first_clean_lap_indices = (
+        raw.loc[clean_laps]
+        .groupby(STINT_COLUMNS, sort=False)['LapNumber']
+        .idxmin()
+    )
+    first_clean_laps = raw.loc[first_clean_lap_indices]
+    later_stint_outlap_indices = first_clean_laps.index[
+        first_clean_laps['Stint'].gt(first_stint.loc[first_clean_laps.index])
+    ]
+    is_stint_out_lap = pd.Series(False, index=raw.index)
+    is_stint_out_lap.loc[later_stint_outlap_indices] = True
 
-    # Drop laps with missing lap times (in/out laps, safety car weirdness)
-    df = df.dropna(subset=['LapTime'])
-    df = df[df['LapTime'] > 0]
+    race_driver_median = raw.groupby(RACE_COLUMNS, sort=False)['LapTime'].transform('median')
+    plausible_lap_time = raw['LapTime'].le(race_driver_median * MAX_LAP_TIME_RATIO)
+    eligible = clean_laps & ~is_stint_out_lap & plausible_lap_time
+    actual_pits = _actual_pits_by_stint(raw, eligible)
+    observations = raw.loc[eligible].copy()
+    observations = observations.sort_values(STINT_COLUMNS + ['LapNumber'])
 
-    # Remove obvious outliers (lap time > 2x median per driver suggests red flag etc.)
-    median_lap = df.groupby('Driver')['LapTime'].transform('median')
-    df = df[df['LapTime'] < 2 * median_lap]
+    observations = observations.merge(actual_pits, on=STINT_COLUMNS, how='left')
 
-    # Feature computation
-    df = compute_lap_time_delta(df)
-    df = compute_sector3_delta(df)
-    df = compute_rolling_degradation(df)
-    df = normalize_tyre_age(df)
+    best_times_so_far = observations.groupby(STINT_COLUMNS, sort=False)['LapTime'].transform(
+        lambda times: times.cummin()
+    )
+    observations['lap_time_delta'] = observations['LapTime'] - best_times_so_far
 
-    # Fill any remaining NaNs
-    feature_cols = ['lap_time_delta', 'sector3_delta', 'rolling_degradation', 'tyre_age_norm']
-    df[feature_cols] = df[feature_cols].fillna(0)
+    if 'Sector3Time' in observations.columns:
+        best_sector3_so_far = observations.groupby(
+            STINT_COLUMNS, sort=False
+        )['Sector3Time'].transform(lambda times: times.cummin())
+        observations['sector3_delta'] = observations['Sector3Time'] - best_sector3_so_far
+    else:
+        observations['sector3_delta'] = 0.0
 
-    return df
+    observations['rolling_degradation'] = (
+        observations.groupby(STINT_COLUMNS, sort=False)['lap_time_delta']
+        .transform(lambda values: values.rolling(window=3, min_periods=1).mean())
+    )
 
+    compound_max_laps = {
+        'SOFT': 25,
+        'MEDIUM': 35,
+        'HARD': 50,
+        'INTERMEDIATE': 30,
+        'WET': 30,
+    }
+    max_life = observations['Compound'].astype(str).str.upper().map(compound_max_laps).fillna(35)
+    observations['tyre_age_norm'] = (
+        pd.to_numeric(observations['TyreLife'], errors='coerce') / max_life
+    ).clip(0, 1)
 
-def get_driver_sequences(df: pd.DataFrame, driver: str) -> tuple:
-    """
-    Extract the observation sequence for one driver,
-    split by stint (each stint is an independent sequence for the HMM).
-
-    Returns:
-        sequences : list of np.arrays, shape (n_laps, n_features) per stint
-        pit_laps  : list of pit lap numbers for this driver
-        compounds : list of compound strings per stint e.g. ['SOFT', 'MEDIUM']
-    """
-    feature_cols = ['lap_time_delta', 'sector3_delta', 'rolling_degradation', 'tyre_age_norm']
-
-    driver_df = df[df['Driver'] == driver].sort_values('LapNumber')
-    pit_laps = driver_df[driver_df['is_pit_lap'] == 1]['LapNumber'].tolist()
-
-    sequences = []
-    compounds = []
-    for stint_id, stint_df in driver_df.groupby('Stint'):
-        stint_df = stint_df.sort_values('LapNumber')
-        obs = stint_df[feature_cols].values.astype(np.float64)
-        if len(obs) >= 3:  # Skip very short stints
-            sequences.append(obs)
-            # Most common compound in this stint
-            if 'Compound' in stint_df.columns:
-                compound = stint_df['Compound'].mode()[0]
-            else:
-                compound = 'UNKNOWN'
-            compounds.append(str(compound).upper())
-
-    return sequences, pit_laps, compounds
-
-
-def get_sequences_by_compound(df: pd.DataFrame) -> dict:
-    """
-    Group all driver stints by tyre compound.
-    Returns dict: { 'SOFT': [seq1, seq2, ...], 'MEDIUM': [...], 'HARD': [...] }
-
-    This allows training a separate HMM per compound, since degradation
-    rates differ significantly across Soft/Medium/Hard.
-    """
-    compound_seqs = {}
-
-    for driver in df['Driver'].unique():
-        seqs, _, compounds = get_driver_sequences(df, driver)
-        for seq, compound in zip(seqs, compounds):
-            compound = compound if compound in ('SOFT', 'MEDIUM', 'HARD') else 'MEDIUM'
-            if compound not in compound_seqs:
-                compound_seqs[compound] = []
-            compound_seqs[compound].append(seq)
-
-    for compound, seqs in compound_seqs.items():
-        print(f"  {compound}: {len(seqs)} stints")
-
-    return compound_seqs
+    observations[FEATURE_COLUMNS] = observations[FEATURE_COLUMNS].replace(
+        [np.inf, -np.inf], np.nan
+    ).fillna(0.0)
+    observations['is_pit_lap'] = 0
+    observations['FeatureVersion'] = FEATURE_VERSION
+    return observations.reset_index(drop=True)
 
 
-def scale_features(sequences: list) -> tuple:
-    """
-    StandardScale features across all sequences.
-    Returns scaled sequences and the fitted scaler (save for inference).
-    """
-    all_obs = np.vstack(sequences)
-    scaler = StandardScaler()
-    scaler.fit(all_obs)
+def get_stint_records(df: pd.DataFrame, min_laps: int = 3) -> list[dict]:
+    """Return observations and original LapNumbers grouped by race, driver, and FastF1 stint."""
+    records = []
+    for key, stint in df.groupby(STINT_COLUMNS, sort=False, dropna=False):
+        stint = stint.sort_values('LapNumber')
+        if len(stint) < min_laps:
+            continue
+        compounds = stint['Compound'].dropna().astype(str).str.strip().str.upper()
+        compounds = compounds[compounds.ne('')]
+        compound = compounds.mode().iloc[0] if not compounds.empty else 'UNKNOWN'
+        record = dict(zip(STINT_COLUMNS, key if isinstance(key, tuple) else (key,)))
+        record.update({
+            'observations': stint[FEATURE_COLUMNS].to_numpy(dtype=np.float64),
+            'lap_numbers': stint['LapNumber'].to_numpy(dtype=np.int64),
+            'compound': compound,
+            'actual_pit_lap': (
+                float(stint['actual_pit_lap'].dropna().iloc[0])
+                if stint['actual_pit_lap'].notna().any()
+                else None
+            ),
+        })
+        records.append(record)
+    return records
 
-    scaled = [scaler.transform(seq) for seq in sequences]
-    return scaled, scaler
 
-
-if __name__ == '__main__':
-    # Quick test with dummy data
-    dummy = pd.DataFrame({
-        'Driver': ['VER'] * 20 + ['HAM'] * 20,
-        'LapNumber': list(range(1, 21)) * 2,
-        'LapTime': [90 + i * 0.1 + np.random.randn() * 0.2 for i in range(20)] * 2,
-        'Sector3Time': [28 + i * 0.05 for i in range(20)] * 2,
-        'TyreLife': list(range(1, 21)) * 2,
-        'Compound': ['SOFT'] * 40,
-        'is_pit_lap': [0] * 15 + [1] + [0] * 4 + [0] * 15 + [1] + [0] * 4,
-    })
-
-    result = build_observation_matrix(dummy)
-    print(result[['Driver', 'LapNumber', 'lap_time_delta', 'tyre_age_norm', 'rolling_degradation']].head(10))
+def scale_features(sequences: list[np.ndarray]) -> tuple[list[np.ndarray], StandardScaler]:
+    """Fit a scaler on the supplied training sequences and transform each sequence."""
+    if not sequences:
+        raise ValueError('Cannot fit a feature scaler without training sequences.')
+    scaler = StandardScaler().fit(np.vstack(sequences))
+    return [scaler.transform(sequence) for sequence in sequences], scaler

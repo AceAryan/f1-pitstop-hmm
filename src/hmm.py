@@ -53,24 +53,26 @@ class GaussianHMM:
 
     def _initialize_params(self, X: np.ndarray):
         """
-        Initialize A, pi, mu, sigma before Baum-Welch.
-        Uses k-means style init for means.
+        Initialize an ordered, left-to-right model using normalized tyre age.
         """
         n_features = X.shape[1]
 
-        # Uniform initial distribution
-        self.pi = np.ones(self.n_states) / self.n_states
+        self.pi = np.zeros(self.n_states)
+        self.pi[0] = 1.0
 
-        # Transition: slight tendency to stay in same state
-        self.A = np.full((self.n_states, self.n_states), 0.1 / (self.n_states - 1))
-        np.fill_diagonal(self.A, 0.8)
-        self.A /= self.A.sum(axis=1, keepdims=True)
+        self.A = np.zeros((self.n_states, self.n_states))
+        for state in range(self.n_states - 1):
+            self.A[state, state] = 0.8
+            self.A[state, state + 1] = 0.2
+        self.A[-1, -1] = 1.0
 
-        # Split data into n_states chunks and use means/covs as init
-        chunks = np.array_split(X, self.n_states)
+        ordered = X[np.argsort(X[:, -1])]
+        chunks = np.array_split(ordered, self.n_states)
         self.mu = np.array([chunk.mean(axis=0) for chunk in chunks])
         self.sigma = np.array([
-            np.cov(chunk.T) + np.eye(n_features) * 1e-3 for chunk in chunks
+            (np.atleast_2d(np.cov(chunk.T)) if len(chunk) > 1 else np.eye(n_features))
+            + np.eye(n_features) * 1e-3
+            for chunk in chunks
         ])
 
     # ------------------------------------------------------------------
@@ -160,6 +162,13 @@ class GaussianHMM:
 
         return beta
 
+    def filter(self, obs: np.ndarray) -> np.ndarray:
+        """Return P(state_t | observations through t), without future observations."""
+        if obs.ndim != 2 or len(obs) == 0:
+            raise ValueError('Filtering requires a non-empty 2D observation sequence.')
+        probabilities, _ = self._forward(obs, self._emission_prob(obs))
+        return probabilities
+
     # ------------------------------------------------------------------
     # Viterbi Algorithm  O(T * N^2)
     # ------------------------------------------------------------------
@@ -187,8 +196,8 @@ class GaussianHMM:
         B = self._emission_prob(obs)
 
         # Use log probabilities to avoid underflow
-        log_A = np.log(self.A + 1e-300)
-        log_pi = np.log(self.pi + 1e-300)
+        log_A = np.where(self.A > 0, np.log(np.maximum(self.A, 1e-300)), -np.inf)
+        log_pi = np.where(self.pi > 0, np.log(np.maximum(self.pi, 1e-300)), -np.inf)
         log_B = np.log(B + 1e-300)
 
         delta = np.zeros((T, N))   # max log-prob up to t ending in state j
@@ -220,8 +229,8 @@ class GaussianHMM:
         """
         Baum-Welch algorithm: learn A, B (mu, sigma), pi from observed sequences.
 
-        E-step: compute γ_t(i) and ξ_t(i,j) using forward-backward
-        M-step: update A, pi, mu, sigma using the computed statistics
+        E-step: compute γ_t(i) and ξ_t(i,j) using forward-backward.
+        M-step: update A, mu, and sigma while keeping pi fixed at [1, 0, ...].
 
         γ_t(i) = P(q_t=i | O, λ)  ← prob of being in state i at time t
         ξ_t(i,j) = P(q_t=i, q_{t+1}=j | O, λ)  ← prob of transition i→j at t
@@ -229,7 +238,9 @@ class GaussianHMM:
         Args:
             sequences: list of np.arrays, each shape (T_k, n_features)
         """
-        # Stack all observations for initialization
+        if not sequences:
+            raise ValueError('Cannot fit an HMM without training sequences.')
+
         all_obs = np.vstack(sequences)
         self._initialize_params(all_obs)
 
@@ -240,11 +251,10 @@ class GaussianHMM:
 
         for iteration in range(self.n_iter):
             # Accumulators for M-step (summed across all sequences)
-            sum_gamma_init = np.zeros(self.n_states)
             sum_xi = np.zeros((self.n_states, self.n_states))
             sum_gamma = np.zeros(self.n_states)
             sum_gamma_obs = np.zeros((self.n_states, n_features))
-            sum_gamma_obs_sq = np.zeros((self.n_states, n_features, n_features))
+            sum_gamma_obs_outer = np.zeros((self.n_states, n_features, n_features))
             total_ll = 0.0
 
             # ---- E-step ----
@@ -270,27 +280,30 @@ class GaussianHMM:
                     xi[t] /= xi[t].sum() + 1e-300
 
                 # Accumulate
-                sum_gamma_init += gamma[0]
                 sum_xi += xi.sum(axis=0)
                 sum_gamma += gamma.sum(axis=0)
 
                 for j in range(self.n_states):
                     w = gamma[:, j]  # shape (T,)
                     sum_gamma_obs[j] += (w[:, None] * obs).sum(axis=0)
-                    diff = obs - self.mu[j]
-                    sum_gamma_obs_sq[j] += (w[:, None, None] * diff[:, :, None] * diff[:, None, :]).sum(axis=0)
+                    sum_gamma_obs_outer[j] += obs.T @ (w[:, None] * obs)
 
             # ---- M-step ----
-            n_seq = len(sequences)
-
-            self.pi = sum_gamma_init / n_seq
-            self.pi /= self.pi.sum()
-
-            self.A = sum_xi / (sum_xi.sum(axis=1, keepdims=True) + 1e-300)
+            updated_A = np.zeros_like(self.A)
+            for state in range(self.n_states - 1):
+                allowed = [state, state + 1]
+                transition_counts = sum_xi[state, allowed]
+                count_sum = transition_counts.sum()
+                updated_A[state, allowed] = (
+                    transition_counts / count_sum if count_sum > 0 else self.A[state, allowed]
+                )
+            updated_A[-1, -1] = 1.0
+            self.A = updated_A
 
             for j in range(self.n_states):
                 self.mu[j] = sum_gamma_obs[j] / (sum_gamma[j] + 1e-300)
-                self.sigma[j] = sum_gamma_obs_sq[j] / (sum_gamma[j] + 1e-300)
+                second_moment = sum_gamma_obs_outer[j] / (sum_gamma[j] + 1e-300)
+                self.sigma[j] = second_moment - np.outer(self.mu[j], self.mu[j])
                 self.sigma[j] += np.eye(n_features) * 1e-3  # Regularize
 
             # Convergence check
@@ -327,11 +340,11 @@ class GaussianHMM:
 
     def decode(self, obs: np.ndarray) -> list:
         """
-        Decode observation sequence to named tyre states.
+        Return named causal, forward-filtered state predictions.
 
         Returns list of state names e.g. ['FRESH', 'FRESH', 'DEGRADING', 'CRITICAL']
         """
-        state_ids = self.viterbi(obs)
+        state_ids = self.filter(obs).argmax(axis=1)
         return [STATE_NAMES[s] for s in state_ids]
 
     def predict_pit_laps(self, obs: np.ndarray, threshold_state: int = 2) -> list:
@@ -344,7 +357,7 @@ class GaussianHMM:
         Returns:
             list of lap indices where a pit stop is predicted
         """
-        states = self.viterbi(obs)
+        states = self.filter(obs).argmax(axis=1)
         pit_laps = []
         for t in range(1, len(states)):
             if states[t] == threshold_state and states[t-1] != threshold_state:

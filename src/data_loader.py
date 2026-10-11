@@ -7,7 +7,6 @@ Caches locally so repeated runs are fast.
 
 import fastf1
 import pandas as pd
-import numpy as np
 import os
 
 # Point FastF1 to local cache — create directory if it doesn't exist
@@ -36,9 +35,10 @@ def load_race(year: int, round_name: str, session_type: str = 'R') -> pd.DataFra
 
     # Keep only relevant columns
     cols = [
-        'Driver', 'LapNumber', 'LapTime', 'Sector1Time', 'Sector2Time',
+        'Driver', 'LapNumber', 'Stint', 'LapTime', 'Sector1Time', 'Sector2Time',
         'Sector3Time', 'Compound', 'TyreLife', 'FreshTyre',
-        'PitInTime', 'PitOutTime', 'Position', 'IsPersonalBest'
+        'PitInTime', 'PitOutTime', 'TrackStatus', 'IsAccurate',
+        'Position', 'IsPersonalBest'
     ]
     cols = [c for c in cols if c in laps.columns]
     laps = laps[cols].copy()
@@ -49,11 +49,9 @@ def load_race(year: int, round_name: str, session_type: str = 'R') -> pd.DataFra
         if col in laps.columns:
             laps[col] = laps[col].dt.total_seconds()
 
-    # Flag pit stop laps
-    laps['is_pit_lap'] = laps['PitInTime'].notna().astype(int)
-
     laps['Year'] = year
     laps['GrandPrix'] = round_name
+    laps['is_pit_lap'] = laps['PitInTime'].notna().astype(int)
 
     print(f"  Loaded {len(laps)} laps across {laps['Driver'].nunique()} drivers.")
     return laps
