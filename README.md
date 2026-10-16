@@ -14,27 +14,30 @@ python main.py --train                          # train on seasons before held-o
 python main.py --evaluate                       # evaluate the held-out season
 python main.py --preprocess --train
 python main.py --preprocess --year 2022 --gp Bahrain Monaco
-python main.py --preprocess --years 2020 2021 2022 2023 2024
+python main.py --preprocess --years 2020 2021 2022 2023
 python main.py --train --test_year 2023 --n_iter 80
 python main.py --evaluate --test_year 2023 --drivers VER HAM LEC
 ```
 
-Preprocessing defaults to every race in seasons 2020–2024. The latest season
-in `data/processed.csv` (2024 by default) is held out. Training only uses
-earlier seasons; the feature scaler and logistic-regression baseline are fit on
-training data only. At least two seasons are required, and a requested test
-season must have an earlier training season. Use `--years` to choose complete
-seasons or `--year`/`--gp` to select one season or specific races.
+Preprocessing defaults to dry-tyre races in seasons 2020–2023. The latest
+season in `data/processed.csv` (2023 by default) is held out; this trains on
+2020–2022 and evaluates on 2023. The 2024 season can be added as a held-out
+test set if API access allows. Training only uses earlier seasons; the feature
+scaler and logistic-regression baseline are fit on training data only. At
+least two seasons are required, and a requested test season must have an
+earlier training season. Use `--years` to choose complete seasons or
+`--year`/`--gp` to select one season or specific races.
 
 FastF1 observations are grouped by **Year, Grand Prix, Driver, and FastF1 Stint**.
 The pipeline retains real `LapNumber` values and pit-in lap targets, while
 excluding pit-in/out laps, inaccurate laps, and non-green track-status laps from
-model observations. It also excludes the first valid lap after each subsequent
-stint boundary, since FastF1 may omit `PitOutTime` or the pit-exit lap may have
-no valid lap time. Extreme lap-time outliers (over 1.35 times that driver's
-race median) are removed. Lap-time and sector deltas use only the best time
-observed up to that lap; they do not use future laps from the stint. Regenerate
-existing processed data with
+model observations. Entire races are excluded before stint extraction if any
+driver used intermediate or wet-compound tyres. It also excludes the first
+valid lap after each subsequent stint boundary, since FastF1 may omit
+`PitOutTime` or the pit-exit lap may have no valid lap time. Extreme lap-time
+outliers (over 1.35 times that driver's race median) are removed. Lap-time and
+sector deltas use only the best time observed up to that lap; they do not use
+future laps from the stint. Regenerate existing processed data with
 `--preprocess`; older or feature-version-mismatched CSV files are rejected with
 an actionable error.
 
@@ -94,7 +97,7 @@ python main.py
 ```
 
 FastF1 caches downloaded sessions locally. The default run downloads the
-complete 2020–2024 race calendars, so the initial preprocessing run can take a
+complete 2020–2023 race calendars, so the initial preprocessing run can take a
 while; subsequent runs reuse the cache.
 
 ## CLI options

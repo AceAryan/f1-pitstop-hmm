@@ -33,7 +33,7 @@ MODELS_DIR = 'results/models'
 PLOTS_DIR = 'results/plots'
 RESULTS_CSV = 'results/evaluation_summary.csv'
 
-DEFAULT_SEASONS = (2020, 2021, 2022, 2023, 2024)
+DEFAULT_SEASONS = (2020, 2021, 2022, 2023)
 COMPOUNDS = ('SOFT', 'MEDIUM', 'HARD')
 PIT_LOOKAHEAD_LAPS = 3
 TYRE_AGE_PIT_THRESHOLD = 0.8
@@ -71,15 +71,35 @@ def run_preprocess(
     frames = []
     loaded_races = []
     skipped_races = []
+    wet_races = []
     for race_year, name in races:
         try:
-            frames.append(load_race(race_year, name))
+            laps_df = load_race(race_year, name)
+            compounds_used = set(
+                laps_df['Compound'].str.upper().dropna().unique()
+            )
+            if compounds_used & {'INTERMEDIATE', 'WET'}:
+                wet_races.append((race_year, name))
+                print(
+                    f'  Excluding {race_year} {name}: '
+                    'intermediate or wet-compound tyres were used.'
+                )
+                continue
+            frames.append(laps_df)
             loaded_races.append((race_year, name))
         except Exception as error:
             skipped_races.append((race_year, name))
             print(f'  Skipping {race_year} {name}: {error}')
     if not frames:
-        raise RuntimeError('No races loaded. Check the FastF1 cache and network access.')
+        if wet_races and not skipped_races:
+            raise RuntimeError(
+                'No dry races loaded; every successfully loaded race used '
+                'intermediate or wet-compound tyres.'
+            )
+        raise RuntimeError(
+            'No dry races loaded. Check the FastF1 cache, network access, and '
+            'whether the requested races used dry-compound tyres.'
+        )
 
     features = build_observation_matrix(pd.concat(frames, ignore_index=True))
     features.to_csv(DATA_PATH, index=False)
@@ -91,6 +111,8 @@ def run_preprocess(
         f'of {len(races)} requested races to {DATA_PATH}.'
     )
     print(f'Loaded races by season: {dict(sorted(loaded_by_year.items()))}')
+    if wet_races:
+        print(f'Excluded {len(wet_races)} races with intermediate or wet tyres.')
     if skipped_races:
         print(
             f'WARNING: {len(skipped_races)} race sessions failed to load; '

@@ -15,7 +15,7 @@ def parse_args() -> argparse.Namespace:
         '--years',
         nargs='+',
         type=int,
-        help='Complete seasons to preprocess (e.g. --years 2020 2021 2022 2023 2024)',
+        help='Complete seasons to preprocess (e.g. --years 2020 2021 2022 2023)',
     )
     parser.add_argument('--gp', nargs='+', help='Grand Prix names for preprocessing')
     parser.add_argument(

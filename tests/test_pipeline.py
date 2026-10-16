@@ -8,7 +8,12 @@ import pandas as pd
 
 from src.features import FEATURE_COLUMNS, build_observation_matrix, get_stint_records
 from src.hmm import GaussianHMM
-from src.pipeline import _get_season_races, _load_data, evaluate_predictions
+from src.pipeline import (
+    _get_season_races,
+    _load_data,
+    evaluate_predictions,
+    run_preprocess,
+)
 
 
 def _lap(
@@ -210,6 +215,36 @@ class FeaturePipelineTests(unittest.TestCase):
             [(2024, 'Bahrain Grand Prix'), (2024, 'Australian Grand Prix')],
         )
         get_schedule.assert_called_once_with(2024, include_testing=False)
+
+    def test_preprocessing_excludes_entire_race_if_any_driver_used_wet_tyres(self):
+        dry_laps = pd.DataFrame([
+            _lap(2023, 'Dry Grand Prix', 'VER', lap, 1, 100.0 + lap)
+            for lap in range(1, 5)
+        ])
+        wet_laps = pd.DataFrame([
+            _lap(2023, 'Wet Grand Prix', 'VER', lap, 1, 100.0 + lap)
+            for lap in range(1, 5)
+        ])
+        wet_laps.loc[wet_laps['LapNumber'].eq(3), 'Compound'] = 'Intermediate'
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'processed.csv'
+            with (
+                patch('src.pipeline._get_season_races', return_value=[
+                    (2023, 'Dry Grand Prix'),
+                    (2023, 'Wet Grand Prix'),
+                ]),
+                patch(
+                    'src.pipeline.load_race',
+                    side_effect=[dry_laps, wet_laps],
+                ),
+                patch('src.pipeline.DATA_PATH', str(path)),
+            ):
+                run_preprocess(years=[2023])
+
+            processed = pd.read_csv(path)
+
+        self.assertEqual(processed['GrandPrix'].unique().tolist(), ['Dry Grand Prix'])
 
 
 if __name__ == '__main__':
