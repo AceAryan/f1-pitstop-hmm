@@ -4,9 +4,9 @@ hmm.py
 Hidden Markov Model — implemented from scratch using NumPy.
 
 Hidden States:
-    0 = FRESH      (tyre performing at peak)
-    1 = DEGRADING  (lap times rising, wear increasing)
-    2 = CRITICAL   (pit stop imminent)
+    0 = FRESH
+    intermediate states = DEGRADING
+    final state = CRITICAL
 
 Observations: continuous (Gaussian emissions per state)
 
@@ -53,7 +53,7 @@ class GaussianHMM:
 
     def _initialize_params(self, X: np.ndarray):
         """
-        Initialize an ordered, left-to-right model using normalized tyre age.
+        Initialize states in the order of the final observation feature.
         """
         n_features = X.shape[1]
 
@@ -345,22 +345,36 @@ class GaussianHMM:
         Returns list of state names e.g. ['FRESH', 'FRESH', 'DEGRADING', 'CRITICAL']
         """
         state_ids = self.filter(obs).argmax(axis=1)
-        return [STATE_NAMES[s] for s in state_ids]
+        if self.n_states == 3:
+            names = STATE_NAMES
+        else:
+            names = {
+                state: (
+                    'FRESH' if state == 0
+                    else 'CRITICAL' if state == self.n_states - 1
+                    else f'STATE_{state}'
+                )
+                for state in range(self.n_states)
+            }
+        return [names[int(state)] for state in state_ids]
 
-    def predict_pit_laps(self, obs: np.ndarray, threshold_state: int = 2) -> list:
+    def predict_pit_laps(self, obs: np.ndarray, threshold_state: int | None = None) -> list:
         """
-        Predict pit stop laps: laps where state transitions INTO CRITICAL (state 2).
+        Return indices where the filtered state first enters the selected state.
 
         Args:
             obs             : observation sequence shape (T, n_features)
-            threshold_state : state index considered "pit now" (default 2 = CRITICAL)
+            threshold_state : state considered critical (defaults to the final state)
         Returns:
             list of lap indices where a pit stop is predicted
         """
+        threshold_state = self.n_states - 1 if threshold_state is None else threshold_state
+        if threshold_state < 0 or threshold_state >= self.n_states:
+            raise ValueError(f'State index {threshold_state} is outside this model.')
         states = self.filter(obs).argmax(axis=1)
         pit_laps = []
-        for t in range(1, len(states)):
-            if states[t] == threshold_state and states[t-1] != threshold_state:
+        for t in range(len(states)):
+            if states[t] == threshold_state and (t == 0 or states[t-1] != threshold_state):
                 pit_laps.append(t)
         return pit_laps
 

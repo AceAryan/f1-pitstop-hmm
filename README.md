@@ -8,25 +8,23 @@ predictions against two baselines: a tyre-age threshold and logistic regression.
 The single entry point is `main.py`; processed observations use CSV throughout.
 
 ```text
-python main.py                                  # preprocess, train, and evaluate
-python main.py --preprocess                     # fetch laps and engineer features
-python main.py --train                          # train on seasons before held-out season
-python main.py --evaluate                       # evaluate the held-out season
-python main.py --preprocess --train
+python main.py --preprocess --years 2020 2021 2022 2023 2024
+python main.py --tune                           # fit on 2020-2022; select using 2023 only
+python main.py --train --test_year 2024         # refit on 2020-2023 using selected settings
+python main.py --evaluate --test_year 2024      # one-time final test
 python main.py --preprocess --year 2022 --gp Bahrain Monaco
-python main.py --preprocess --years 2020 2021 2022 2023
-python main.py --train --test_year 2023 --n_iter 80
-python main.py --evaluate --test_year 2023 --drivers VER HAM LEC
 ```
 
-Preprocessing defaults to dry-tyre races in seasons 2020–2023. The latest
-season in `data/processed.csv` (2023 by default) is held out; this trains on
-2020–2022 and evaluates on 2023. The 2024 season can be added as a held-out
-test set if API access allows. Training only uses earlier seasons; the feature
-scaler and logistic-regression baseline are fit on training data only. At
-least two seasons are required, and a requested test season must have an
-earlier training season. Use `--years` to choose complete seasons or
-`--year`/`--gp` to select one season or specific races.
+The final experiment is chronological: candidate models are fit on 2020–2022,
+all threshold and state-count selection uses 2023, and final models are refit
+on 2020–2023 before the 2024 test is evaluated once. `--tune` selects the
+terminal-state posterior threshold (0.3–0.9), tyre-age threshold (0.60–0.95),
+and state count (2, 3, or 4) by pooled 2023 F1 at +/-2 laps. It also tunes the
+no-tyre-age HMM ablation on the same validation season. Fitted scalers and
+models use training seasons only. The 2024 final evaluation is guarded against
+repeat runs; it requires final models trained with the saved 2023 configuration.
+Preprocessing defaults to dry-tyre races in 2020–2023; pass `--years` to add
+2024 or select another scope.
 
 FastF1 observations are grouped by **Year, Grand Prix, Driver, and FastF1 Stint**.
 The pipeline retains real `LapNumber` values and pit-in lap targets, while
@@ -48,26 +46,36 @@ an actionable error.
 | State | Meaning |
 |---|---|
 | 0 | FRESH |
-| 1 | DEGRADING |
-| 2 | CRITICAL |
+| 1 through N-2 | DEGRADING (no intermediate state for a 2-state model) |
+| N-1 | CRITICAL |
 
-The HMM starts with `pi = [1, 0, 0]`, uses left-to-right state transitions, and
-initializes its state emissions in increasing tyre-age order. Evaluation uses
+The HMM starts in state 0, uses left-to-right state transitions, and initializes
+state emissions in increasing order of its final observation feature (tyre age
+for the full model; rolling degradation for the ablation). Evaluation uses
 forward-filtered probabilities (`P(state_t | laps through t)`), not Viterbi
 decoding, so a prediction never uses future laps from the same stint.
 
 ## Baselines and output
 
-- **Tyre-age rule:** predict once per stint when normalized tyre age reaches 0.8.
+- **Tyre-age rule:** predict once per stint at the threshold selected on 2023.
 - **Logistic regression:** predict within a three-lap horizon, trained using
   training-season pit targets.
-- **HMM:** predict when forward-filtered states first enter CRITICAL.
+- **HMM:** predict when forward-filtered probability of the final state crosses
+  its 2023-selected alarm threshold.
+- **HMM ablation:** the same state model without normalized tyre age as an
+  observation, to measure whether lap-degradation signals add value beyond
+  tyre-age counting.
 
-Pit predictions are matched to real pit-in `LapNumber` values using the
-`--tolerance` lap window. Results are written to
-`results/evaluation_summary.csv`, with separate metrics for all three methods.
-Trained compound HMMs, fitted scalers, and the baseline are stored under
-`results/models/`; evaluation plots are saved under `results/plots/`.
+Pits are matched one-to-one within each driver-race at the selected lap
+tolerance. Precision, recall, and F1 are pooled across driver-races, with
+sensitivity results at +/-1, +/-2, and +/-3 laps. Matched predicted-minus-actual
+lap differences and unmatched prediction/pit records are saved for timing-bias
+analysis. Per-driver-race metrics are retained as supplementary detail.
+Results are written to `results/evaluation_summary.csv`,
+`results/evaluation_pooled_summary.csv`, and
+`results/prediction_timing_deltas.csv`. Validation grid scores are saved to
+`results/validation_tuning.csv`. Models and scalers are under `results/models/`;
+plots are under `results/plots/`.
 
 ## Project structure
 
@@ -95,27 +103,27 @@ f1-pitstop-hmm/
 git clone https://github.com/AceAryan/f1-pitstop-hmm.git
 cd f1-pitstop-hmm
 pip install -r requirements.txt
-python main.py
+python main.py --help
 ```
 
-FastF1 caches downloaded sessions locally. The default run downloads the
-complete 2020–2023 race calendars, so the initial preprocessing run can take a
-while; subsequent runs reuse the cache.
+FastF1 caches downloaded sessions locally. The explicit preprocessing command
+downloads the selected race calendars; subsequent runs reuse the cache.
 
 ## CLI options
 
 | Option | Description |
 |---|---|
 | `--preprocess` | Fetch data and create `data/processed.csv` |
-| `--train` | Train on seasons earlier than `--test_year` |
-| `--evaluate` | Evaluate only the held-out `--test_year` |
+| `--tune` | Tune thresholds and state count on 2023; fit candidates on 2020–2022 |
+| `--train` | Train before `--test_year`; for 2024, refit with the selected 2023 settings |
+| `--evaluate` | Evaluate the held-out `--test_year`; the 2024 final test runs once |
 | `--year` | Season to use with preprocessing |
 | `--years` | Complete seasons to use with preprocessing |
 | `--gp` | Grand Prix names to use with preprocessing |
 | `--test_year` | Held-out season; defaults to the latest available season |
 | `--compounds` | HMM compounds (default: `SOFT MEDIUM HARD`) |
 | `--n_iter` | Baum-Welch iterations (default: 50) |
-| `--n_states` | Number of states; must be 3 |
+| `--n_states` | States for non-final training (2, 3, or 4) |
 | `--tolerance` | Pit matching window in laps (default: 2) |
 | `--drivers` | Driver codes to evaluate |
 | `--plot_drivers` | Driver codes for state plots |

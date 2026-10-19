@@ -9,9 +9,17 @@ import pandas as pd
 from src.features import FEATURE_COLUMNS, build_observation_matrix, get_stint_records
 from src.hmm import GaussianHMM
 from src.pipeline import (
+    FINAL_TEST_YEAR,
+    HMM_STATE_CANDIDATES,
     _get_season_races,
+    _feature_columns,
+    _first_threshold_entry,
+    _match_laps,
     _load_data,
+    _pooled_metrics,
+    _timing_rows,
     evaluate_predictions,
+    run_evaluate,
     run_preprocess,
 )
 
@@ -108,11 +116,89 @@ class FeaturePipelineTests(unittest.TestCase):
         np.testing.assert_allclose(short_filter, full_filter[:5])
         self.assertEqual(short_filter.shape, (5, 3))
 
+    def test_hmm_state_count_candidates_cover_two_three_and_four_states(self):
+        self.assertEqual(HMM_STATE_CANDIDATES, (2, 3, 4))
+        observations = np.array([
+            [age * 0.2, age * 0.1, age * 0.3, age / 12]
+            for age in range(12)
+        ], dtype=float)
+        for n_states in HMM_STATE_CANDIDATES:
+            model = GaussianHMM(n_states=n_states, n_iter=2)
+            model.fit([observations, observations + 0.05])
+            probabilities = model.filter(observations)
+            self.assertEqual(probabilities.shape, (12, n_states))
+            self.assertIsNotNone(model.predict_pit_laps(observations))
+
+    def test_ablation_excludes_tyre_age_from_hmm_features(self):
+        self.assertNotIn('tyre_age_norm', _feature_columns(include_tyre_age=False))
+        self.assertIn('rolling_degradation', _feature_columns(include_tyre_age=False))
+
+    def test_hmm_alarm_uses_first_posterior_threshold_crossing(self):
+        predictions = _first_threshold_entry(
+            np.array([0.1, 0.35, 0.7, 0.9]),
+            np.array([3, 4, 5, 6]),
+            threshold=0.6,
+        )
+
+        self.assertEqual(predictions, [5])
+
     def test_pit_matching_uses_real_lap_numbers(self):
         metrics = evaluate_predictions([72], [72], tolerance=2)
         self.assertEqual(metrics['TP'], 1)
         self.assertEqual(metrics['FP'], 0)
         self.assertEqual(metrics['FN'], 0)
+
+    def test_pit_matching_maximizes_one_to_one_matches(self):
+        matches = _match_laps([2, 3], [1, 2], tolerance=1)
+
+        self.assertEqual(len(matches), 2)
+        self.assertEqual(set(matches), {(2, 1), (3, 2)})
+
+    def test_pooled_metrics_are_not_a_mean_of_driver_race_scores(self):
+        metrics = _pooled_metrics(
+            {
+                (2023, 'Bahrain', 'VER'): [10, 20],
+                (2023, 'Bahrain', 'HAM'): [],
+            },
+            {
+                (2023, 'Bahrain', 'VER'): [10],
+                (2023, 'Bahrain', 'HAM'): [30],
+            },
+            tolerance=2,
+        )
+
+        self.assertEqual((metrics['TP'], metrics['FP'], metrics['FN']), (1, 1, 1))
+        self.assertEqual(metrics['F1'], 0.5)
+
+    def test_timing_report_pairs_one_to_one_and_keeps_unmatched_predictions(self):
+        rows = _timing_rows(
+            'HMM',
+            (2023, 'Bahrain', 'VER'),
+            predicted=[10, 30],
+            actual=[11],
+        )
+
+        matched = [row for row in rows if row['MatchStatus'] == 'matched']
+        unmatched = [row for row in rows if row['MatchStatus'] == 'unmatched_prediction']
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]['PredictedMinusActual'], -1)
+        self.assertEqual(len(unmatched), 1)
+
+    def test_final_2024_evaluation_rejects_repeat_run(self):
+        data = pd.DataFrame({
+            'Year': [2023, FINAL_TEST_YEAR],
+            'GrandPrix': ['Bahrain', 'Bahrain'],
+            'Driver': ['VER', 'VER'],
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'final_test.complete'
+            marker.write_text('already evaluated', encoding='utf-8')
+            with (
+                patch('src.pipeline._load_data', return_value=data),
+                patch('src.pipeline.FINAL_TEST_MARKER', str(marker)),
+                self.assertRaisesRegex(RuntimeError, 'already been run'),
+            ):
+                run_evaluate(test_year=FINAL_TEST_YEAR)
 
     def test_stint_with_missing_compounds_uses_unknown_label(self):
         rows = [
