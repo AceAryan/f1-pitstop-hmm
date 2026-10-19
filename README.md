@@ -35,7 +35,9 @@ model observations. Entire races are excluded before stint extraction if any
 driver used intermediate or wet-compound tyres. It also excludes the first
 valid lap after each subsequent stint boundary, since FastF1 may omit
 `PitOutTime` or the pit-exit lap may have no valid lap time. Extreme lap-time
-outliers (over 1.35 times that driver's race median) are removed. Lap-time and
+outliers (over 1.35 times that driver's expanding median of prior clean laps)
+are removed without using future lap times. Laps missing a compound or valid
+tyre age are excluded rather than assigned a fresh-tyre age. Lap-time and
 sector deltas use only the best time observed up to that lap; they do not use
 future laps from the stint. Regenerate existing processed data with
 `--preprocess`; older or feature-version-mismatched CSV files are rejected with

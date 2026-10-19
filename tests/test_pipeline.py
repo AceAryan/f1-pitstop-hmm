@@ -119,14 +119,28 @@ class FeaturePipelineTests(unittest.TestCase):
             _lap(2023, 'Bahrain', 'VER', lap, 1, 100.0 + lap)
             for lap in range(1, 4)
         ]
-        for row in rows:
-            row['Compound'] = None
+        rows[0]['Compound'] = None
+        rows[1]['Compound'] = 'None'
+        rows[2]['Compound'] = 'unknown'
 
         features = build_observation_matrix(pd.DataFrame(rows))
         records = get_stint_records(features)
 
-        self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]['compound'], 'UNKNOWN')
+        self.assertTrue(features.empty)
+        self.assertEqual(records, [])
+
+    def test_laps_with_missing_or_invalid_tyre_age_are_excluded(self):
+        rows = [
+            _lap(2023, 'Bahrain', 'VER', lap, 1, 100.0 + lap)
+            for lap in range(1, 6)
+        ]
+        rows[1]['TyreLife'] = None
+        rows[3]['TyreLife'] = -1
+
+        features = build_observation_matrix(pd.DataFrame(rows))
+
+        self.assertEqual(features['LapNumber'].tolist(), [1, 3, 5])
+        self.assertTrue(features['tyre_age_norm'].notna().all())
 
     def test_unmarked_out_lap_at_new_stint_start_is_removed(self):
         rows = [
@@ -161,6 +175,27 @@ class FeaturePipelineTests(unittest.TestCase):
 
         self.assertNotIn(2, features['LapNumber'].tolist())
 
+    def test_outlier_filter_uses_only_prior_laps(self):
+        prefix = pd.DataFrame([
+            _lap(2023, 'Bahrain', 'VER', lap, 1, lap_time)
+            for lap, lap_time in enumerate([130.0, 100.0, 100.0, 100.0, 100.0], 1)
+        ])
+        future = pd.DataFrame([
+            _lap(2023, 'Bahrain', 'VER', lap, 1, 80.0)
+            for lap in range(6, 11)
+        ])
+
+        prefix_features = build_observation_matrix(prefix)
+        extended_features = build_observation_matrix(pd.concat([prefix, future]))
+        extended_prefix = extended_features[extended_features['LapNumber'] <= 5]
+
+        self.assertEqual(prefix_features['LapNumber'].tolist(), [1, 2, 3, 4, 5])
+        self.assertEqual(extended_prefix['LapNumber'].tolist(), [1, 2, 3, 4, 5])
+        np.testing.assert_allclose(
+            prefix_features[FEATURE_COLUMNS].to_numpy(),
+            extended_prefix[FEATURE_COLUMNS].to_numpy(),
+        )
+
     def test_cumulative_best_features_do_not_depend_on_future_laps(self):
         prefix = pd.DataFrame([
             _lap(2023, 'Bahrain', 'VER', lap, 1, 100.0 + lap)
@@ -184,7 +219,7 @@ class FeaturePipelineTests(unittest.TestCase):
 
         features = build_observation_matrix(raw)
 
-        self.assertTrue((features['FeatureVersion'] == 3).all())
+        self.assertTrue((features['FeatureVersion'] == 5).all())
 
     def test_loader_rejects_processed_data_without_current_feature_version(self):
         with tempfile.TemporaryDirectory() as directory:

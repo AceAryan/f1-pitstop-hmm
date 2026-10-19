@@ -11,7 +11,7 @@ FEATURE_COLUMNS = [
     'rolling_degradation',
     'tyre_age_norm',
 ]
-FEATURE_VERSION = 3
+FEATURE_VERSION = 5
 MAX_LAP_TIME_RATIO = 1.35
 RACE_COLUMNS = ['Year', 'GrandPrix', 'Driver']
 STINT_COLUMNS = RACE_COLUMNS + ['Stint']
@@ -89,10 +89,36 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
     is_stint_out_lap = pd.Series(False, index=raw.index)
     is_stint_out_lap.loc[later_stint_outlap_indices] = True
 
-    race_driver_median = raw.groupby(RACE_COLUMNS, sort=False)['LapTime'].transform('median')
-    plausible_lap_time = raw['LapTime'].le(race_driver_median * MAX_LAP_TIME_RATIO)
-    eligible = clean_laps & ~is_stint_out_lap & plausible_lap_time
-    actual_pits = _actual_pits_by_stint(raw, eligible)
+    ordered = raw.sort_values(RACE_COLUMNS + ['LapNumber'], kind='stable')
+    historical_lap_times = ordered['LapTime'].where(clean_laps.loc[ordered.index])
+    prior_lap_median = (
+        ordered.assign(_historical_lap_time=historical_lap_times)
+        .groupby(RACE_COLUMNS, sort=False)['_historical_lap_time']
+        .transform(lambda times: times.shift().expanding(min_periods=1).median())
+        .reindex(raw.index)
+    )
+    plausible_lap_time = (
+        prior_lap_median.isna()
+        | raw['LapTime'].le(prior_lap_median * MAX_LAP_TIME_RATIO)
+    )
+    compound_max_laps = {
+        'SOFT': 25,
+        'MEDIUM': 35,
+        'HARD': 50,
+        'INTERMEDIATE': 30,
+        'WET': 30,
+    }
+    compound = raw['Compound'].astype('string').str.strip().str.upper()
+    tyre_life = pd.to_numeric(raw['TyreLife'], errors='coerce')
+    valid_tyre_metadata = (
+        compound.isin(compound_max_laps)
+        & tyre_life.notna()
+        & np.isfinite(tyre_life)
+        & tyre_life.ge(0)
+    ).fillna(False)
+    pit_eligible = clean_laps & ~is_stint_out_lap & plausible_lap_time
+    eligible = pit_eligible & valid_tyre_metadata
+    actual_pits = _actual_pits_by_stint(raw, pit_eligible)
     observations = raw.loc[eligible].copy()
     observations = observations.sort_values(STINT_COLUMNS + ['LapNumber'])
 
@@ -116,16 +142,9 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
         .transform(lambda values: values.rolling(window=3, min_periods=1).mean())
     )
 
-    compound_max_laps = {
-        'SOFT': 25,
-        'MEDIUM': 35,
-        'HARD': 50,
-        'INTERMEDIATE': 30,
-        'WET': 30,
-    }
-    max_life = observations['Compound'].astype(str).str.upper().map(compound_max_laps).fillna(35)
+    max_life = compound.loc[observations.index].map(compound_max_laps).fillna(35)
     observations['tyre_age_norm'] = (
-        pd.to_numeric(observations['TyreLife'], errors='coerce') / max_life
+        tyre_life.loc[observations.index] / max_life
     ).clip(0, 1)
 
     observations[FEATURE_COLUMNS] = observations[FEATURE_COLUMNS].replace(
