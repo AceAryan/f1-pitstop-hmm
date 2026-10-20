@@ -1,5 +1,6 @@
-import unittest
+import json
 import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +18,8 @@ from src.pipeline import (
     _match_laps,
     _load_data,
     _pooled_metrics,
+    _write_race_explorer_json,
+    _write_validation_metrics_json,
     _timing_rows,
     evaluate_predictions,
     run_evaluate,
@@ -184,6 +187,73 @@ class FeaturePipelineTests(unittest.TestCase):
         self.assertEqual(matched[0]['PredictedMinusActual'], -1)
         self.assertEqual(len(unmatched), 1)
 
+    def test_static_site_json_exports_validation_curve_and_race_timeline(self):
+        config = {
+            'hmm_states': 3,
+            'hmm_threshold': 0.6,
+            'hmm_no_age_states': 2,
+            'hmm_no_age_threshold': 0.7,
+            'tyre_age_threshold': 0.8,
+        }
+        rows = []
+        for method, n_states, thresholds in (
+            ('HMM', 3, [0.3, 0.6]),
+            ('HMM', 4, [0.3]),
+            ('HMMNoAge', 2, [0.3, 0.7]),
+            ('TyreAge', np.nan, [0.6, 0.8]),
+            ('Logistic', np.nan, [np.nan]),
+        ):
+            for threshold in thresholds:
+                rows.append({
+                    'Method': method,
+                    'NStates': n_states,
+                    'Threshold': threshold,
+                    'Precision': 0.5,
+                    'Recall': 0.4,
+                    'F1': 0.444,
+                    'TP': 2,
+                    'FP': 2,
+                    'FN': 3,
+                })
+
+        with tempfile.TemporaryDirectory() as directory:
+            validation_path = Path(directory) / 'validation.json'
+            race_path = Path(directory) / 'race-explorer.json'
+            with (
+                patch('src.pipeline.VALIDATION_METRICS_JSON', str(validation_path)),
+                patch('src.pipeline.RACE_EXPLORER_JSON', str(race_path)),
+            ):
+                _write_validation_metrics_json(pd.DataFrame(rows), config)
+                _write_race_explorer_json({
+                    (2024, 'Bahrain Grand Prix', 'VER'): {
+                        'actualPitLaps': [4],
+                        'laps': {
+                            2: {
+                                'lapNumber': 2,
+                                'lapTime': 91.2,
+                                'hmmStateProbabilities': [0.2, 0.8],
+                                'hmmAlarm': True,
+                                'tyreAgeAlarm': False,
+                                'logisticAlarm': False,
+                                'actualPit': False,
+                            },
+                        },
+                    },
+                }, 0.6, 0.8)
+
+            validation = json.loads(validation_path.read_text(encoding='utf-8'))
+            race_explorer = json.loads(race_path.read_text(encoding='utf-8'))
+
+        self.assertEqual(validation['methods']['HMM']['nStates'], 3)
+        self.assertEqual(
+            [point['threshold'] for point in validation['methods']['HMM']['thresholds']],
+            [0.3, 0.6],
+        )
+        self.assertEqual(race_explorer['year'], 2024)
+        driver = race_explorer['races'][0]['drivers'][0]
+        self.assertEqual(driver['actualPitLaps'], [4])
+        self.assertEqual(driver['laps'][0]['hmmStateProbabilities'], [0.2, 0.8])
+
     def test_final_2024_evaluation_rejects_repeat_run(self):
         data = pd.DataFrame({
             'Year': [2023, FINAL_TEST_YEAR],
@@ -350,6 +420,7 @@ class FeaturePipelineTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'processed.csv'
+            raw_path = Path(directory) / 'raw_laps.csv'
             with (
                 patch('src.pipeline._get_season_races', return_value=[
                     (2023, 'Dry Grand Prix'),
@@ -360,12 +431,15 @@ class FeaturePipelineTests(unittest.TestCase):
                     side_effect=[dry_laps, wet_laps],
                 ),
                 patch('src.pipeline.DATA_PATH', str(path)),
+                patch('src.pipeline.RAW_LAPS_PATH', str(raw_path)),
             ):
                 run_preprocess(years=[2023])
 
             processed = pd.read_csv(path)
+            raw_laps = pd.read_csv(raw_path)
 
         self.assertEqual(processed['GrandPrix'].unique().tolist(), ['Dry Grand Prix'])
+        self.assertEqual(raw_laps['GrandPrix'].unique().tolist(), ['Dry Grand Prix'])
 
 
 if __name__ == '__main__':

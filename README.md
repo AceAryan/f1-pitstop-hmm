@@ -24,7 +24,9 @@ no-tyre-age HMM ablation on the same validation season. Fitted scalers and
 models use training seasons only. The 2024 final evaluation is guarded against
 repeat runs; it requires final models trained with the saved 2023 configuration.
 Preprocessing defaults to dry-tyre races in 2020–2023; pass `--years` to add
-2024 or select another scope.
+2024 or select another scope. It writes clean observations to
+`data/processed.csv` and preserves all loaded laps from dry races in
+`data/race_laps.csv` for full-race timelines.
 
 FastF1 observations are grouped by **Year, Grand Prix, Driver, and FastF1 Stint**.
 The pipeline retains real `LapNumber` values and pit-in lap targets, while
@@ -74,8 +76,18 @@ analysis. Per-driver-race metrics are retained as supplementary detail.
 Results are written to `results/evaluation_summary.csv`,
 `results/evaluation_pooled_summary.csv`, and
 `results/prediction_timing_deltas.csv`. Validation grid scores are saved to
-`results/validation_tuning.csv`. Models and scalers are under `results/models/`;
-plots are under `results/plots/`.
+`results/validation_tuning.csv`. `--tune` also exports
+`results/site-data/validation-threshold-metrics-2023.json`, containing the
+Python-computed pooled metric curve for each tuned threshold. A successful
+`--evaluate --test_year 2024` exports
+`results/site-data/race-explorer-2024.json`, with race/driver timelines,
+per-lap forward-filtered state probabilities, all available raw lap times,
+HMM and baseline alarm flags, model-observation markers, and actual pit laps.
+On laps excluded from model observations, probabilities carry forward from the
+latest observation in that stint; the model-observation marker distinguishes
+new updates from carried values. These JSON files are intended as static
+GitHub Pages inputs; no website runtime computation is required. Models and
+scalers are under `results/models/`; plots are under `results/plots/`.
 
 ## Project structure
 

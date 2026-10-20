@@ -1,5 +1,6 @@
 """Season-split preprocessing, training, and pit-stop evaluation."""
 
+import json
 import os
 import pickle
 from collections import defaultdict
@@ -30,6 +31,7 @@ from src.hmm import GaussianHMM
 
 
 DATA_PATH = 'data/processed.csv'
+RAW_LAPS_PATH = 'data/race_laps.csv'
 MODELS_DIR = 'results/models'
 PLOTS_DIR = 'results/plots'
 RESULTS_CSV = 'results/evaluation_summary.csv'
@@ -38,6 +40,11 @@ TIMING_DELTAS_CSV = 'results/prediction_timing_deltas.csv'
 TUNING_RESULTS_CSV = 'results/validation_tuning.csv'
 TUNING_CONFIG_PATH = 'results/validation_tuning.pkl'
 FINAL_TEST_MARKER = 'results/final_test_2024.complete'
+SITE_DATA_DIR = 'results/site-data'
+RACE_EXPLORER_JSON = os.path.join(SITE_DATA_DIR, 'race-explorer-2024.json')
+VALIDATION_METRICS_JSON = os.path.join(
+    SITE_DATA_DIR, 'validation-threshold-metrics-2023.json'
+)
 
 DEFAULT_SEASONS = (2020, 2021, 2022, 2023)
 COMPOUNDS = ('SOFT', 'MEDIUM', 'HARD')
@@ -114,7 +121,9 @@ def run_preprocess(
             'whether the requested races used dry-compound tyres.'
         )
 
-    features = build_observation_matrix(pd.concat(frames, ignore_index=True))
+    raw_laps = pd.concat(frames, ignore_index=True)
+    raw_laps.to_csv(RAW_LAPS_PATH, index=False)
+    features = build_observation_matrix(raw_laps)
     features.to_csv(DATA_PATH, index=False)
     loaded_by_year: dict[int, int] = defaultdict(int)
     for season, _ in loaded_races:
@@ -123,6 +132,7 @@ def run_preprocess(
         f'Saved {len(features)} clean lap observations from {len(loaded_races)} '
         f'of {len(races)} requested races to {DATA_PATH}.'
     )
+    print(f'Saved {len(raw_laps)} dry-race lap records to {RAW_LAPS_PATH}.')
     print(f'Loaded races by season: {dict(sorted(loaded_by_year.items()))}')
     if wet_races:
         print(f'Excluded {len(wet_races)} races with intermediate or wet tyres.')
@@ -268,6 +278,115 @@ def _save_model_bundles(bundles: dict[str, dict], model_name: str) -> list[str]:
     return trained
 
 
+def _write_json(path: str, payload: dict) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as output:
+        json.dump(payload, output, indent=2, allow_nan=False)
+        output.write('\n')
+
+
+def _write_validation_metrics_json(tuning: pd.DataFrame, config: dict) -> None:
+    methods = {}
+    for method, states_key, threshold_key in (
+        ('HMM', 'hmm_states', 'hmm_threshold'),
+        ('HMMNoAge', 'hmm_no_age_states', 'hmm_no_age_threshold'),
+    ):
+        state_count = config[states_key]
+        selected_rows = tuning[
+            tuning['Method'].eq(method) & tuning['NStates'].eq(state_count)
+        ].sort_values('Threshold')
+        methods[method] = {
+            'nStates': state_count,
+            'selectedThreshold': config[threshold_key],
+            'thresholds': [
+                {
+                    'threshold': float(row['Threshold']),
+                    'precision': float(row['Precision']),
+                    'recall': float(row['Recall']),
+                    'f1': float(row['F1']),
+                    'tp': int(row['TP']),
+                    'fp': int(row['FP']),
+                    'fn': int(row['FN']),
+                }
+                for _, row in selected_rows.iterrows()
+            ],
+        }
+
+    tyre_age_rows = tuning[tuning['Method'].eq('TyreAge')].sort_values('Threshold')
+    methods['TyreAge'] = {
+        'selectedThreshold': config['tyre_age_threshold'],
+        'thresholds': [
+            {
+                'threshold': float(row['Threshold']),
+                'precision': float(row['Precision']),
+                'recall': float(row['Recall']),
+                'f1': float(row['F1']),
+                'tp': int(row['TP']),
+                'fp': int(row['FP']),
+                'fn': int(row['FN']),
+            }
+            for _, row in tyre_age_rows.iterrows()
+        ],
+    }
+    logistic = tuning[tuning['Method'].eq('Logistic')].iloc[0]
+    methods['Logistic'] = {
+        'precision': float(logistic['Precision']),
+        'recall': float(logistic['Recall']),
+        'f1': float(logistic['F1']),
+        'tp': int(logistic['TP']),
+        'fp': int(logistic['FP']),
+        'fn': int(logistic['FN']),
+    }
+    _write_json(VALIDATION_METRICS_JSON, {
+        'schemaVersion': 1,
+        'validationYear': VALIDATION_YEAR,
+        'trainingYears': list(TRAINING_SEASONS),
+        'matchingTolerance': 2,
+        'metricAveraging': 'pooled',
+        'methods': methods,
+    })
+
+
+def _write_race_explorer_json(
+    explorer_drivers: dict[tuple, dict],
+    hmm_threshold: float,
+    tyre_age_threshold: float,
+) -> None:
+    race_explorer = []
+    for race_key in sorted(explorer_drivers):
+        year, grand_prix, driver = race_key
+        if not race_explorer or race_explorer[-1]['grandPrix'] != grand_prix:
+            race_explorer.append({
+                'year': int(year),
+                'grandPrix': grand_prix,
+                'drivers': [],
+            })
+        driver_data = explorer_drivers[race_key]
+        race_explorer[-1]['drivers'].append({
+            'driver': driver,
+            'actualPitLaps': driver_data['actualPitLaps'],
+            'laps': [
+                driver_data['laps'][lap_number]
+                for lap_number in sorted(driver_data['laps'])
+            ],
+        })
+    _write_json(RACE_EXPLORER_JSON, {
+        'schemaVersion': 1,
+        'year': FINAL_TEST_YEAR,
+        'stateNames': {
+            '0': 'FRESH',
+            'intermediate': 'DEGRADING',
+            'final': 'CRITICAL',
+        },
+        'alarmThresholds': {
+            'hmm': hmm_threshold,
+            'tyreAge': tyre_age_threshold,
+            'logistic': 'classifier decision boundary',
+        },
+        'races': race_explorer,
+    })
+
+
 def run_tune(n_iter: int = 50, compounds: list[str] | None = None) -> dict:
     """Tune on 2023 only; all candidate models are fit on 2020–2022."""
     if os.path.exists(FINAL_TEST_MARKER):
@@ -282,7 +401,7 @@ def run_tune(n_iter: int = 50, compounds: list[str] | None = None) -> dict:
         )
     train_data = data[data['Year'].isin(TRAINING_SEASONS)].copy()
     validation_data = data[data['Year'].eq(VALIDATION_YEAR)].copy()
-    validation_groups = _group_records(get_stint_records(validation_data))
+    validation_groups = _group_records(get_stint_records(validation_data, min_laps=1))
     actual_by_race = _actual_pits_by_race(validation_data)
     requested = [compound.upper() for compound in (compounds or COMPOUNDS)]
     tuning_rows = []
@@ -386,8 +505,10 @@ def run_tune(n_iter: int = 50, compounds: list[str] | None = None) -> dict:
     }
     with open(TUNING_CONFIG_PATH, 'wb') as config_file:
         pickle.dump(config, config_file)
+    _write_validation_metrics_json(tuning, config)
     print(f'Saved 2023 tuning results to {TUNING_RESULTS_CSV}')
     print(f'Saved selected configuration to {TUNING_CONFIG_PATH}')
+    print(f'Saved validation slider data to {VALIDATION_METRICS_JSON}')
     return config
 
 
@@ -675,6 +796,31 @@ def _load_models(test_year: int) -> tuple[dict[str, dict[str, dict]], object, di
     return models, baseline_bundle['model'], metadata
 
 
+def _load_raw_laps(year: int) -> pd.DataFrame:
+    if not os.path.exists(RAW_LAPS_PATH):
+        raise FileNotFoundError(
+            f'{RAW_LAPS_PATH} not found; rerun --preprocess to retain complete race laps '
+            'for the static race explorer.'
+        )
+    raw_laps = pd.read_csv(RAW_LAPS_PATH)
+    required = set(RACE_COLUMNS + ['LapNumber', 'LapTime', 'Stint', 'Compound'])
+    missing = sorted(required.difference(raw_laps.columns))
+    if missing:
+        raise ValueError(
+            f'{RAW_LAPS_PATH} is missing required columns {missing}; '
+            'rerun --preprocess.'
+        )
+    raw_laps['Year'] = pd.to_numeric(raw_laps['Year'], errors='raise').astype(int)
+    raw_laps['LapNumber'] = pd.to_numeric(raw_laps['LapNumber'], errors='coerce')
+    raw_laps['LapTime'] = pd.to_numeric(raw_laps['LapTime'], errors='coerce')
+    season_laps = raw_laps[raw_laps['Year'].eq(year)].copy()
+    if season_laps.empty:
+        raise ValueError(
+            f'{RAW_LAPS_PATH} contains no laps for {year}; rerun --preprocess with that season.'
+        )
+    return season_laps
+
+
 def _save_state_plot(
     race_driver: pd.DataFrame,
     predictions: dict[str, list[int]],
@@ -743,6 +889,10 @@ def run_evaluate(
             '2024 final evaluation requires models refit on 2020–2023 '
             'using the saved 2023 tuning configuration.'
         )
+    explorer_source = (
+        _load_raw_laps(test_year)
+        if test_year == FINAL_TEST_YEAR else test_data
+    )
     config = metadata.get('tuned_config') or {}
     hmm_threshold = float(config.get('hmm_threshold', DEFAULT_HMM_ALARM_THRESHOLD))
     no_age_threshold = float(
@@ -751,7 +901,7 @@ def run_evaluate(
     tyre_age_threshold = float(
         config.get('tyre_age_threshold', DEFAULT_TYRE_AGE_THRESHOLD)
     )
-    records = get_stint_records(test_data)
+    records = get_stint_records(test_data, min_laps=1)
     selected_drivers = set(drivers) if drivers else set(test_data['Driver'].unique())
     plot_selection = set(plot_drivers or list(selected_drivers)[:3])
     records = [record for record in records if record['Driver'] in selected_drivers]
@@ -762,6 +912,34 @@ def run_evaluate(
         for race_key, pits in _actual_pits_by_race(test_data).items()
         if race_key[2] in selected_drivers
     }
+    explorer_drivers = {}
+    for race_key, race_driver in explorer_source[
+        explorer_source['Driver'].isin(selected_drivers)
+    ].groupby(RACE_COLUMNS, sort=True):
+        actual_pits = actual_by_race.get(race_key, [])
+        timeline = {}
+        for _, lap in race_driver.sort_values('LapNumber').iterrows():
+            lap_number = int(lap['LapNumber'])
+            timeline[lap_number] = {
+                'lapNumber': lap_number,
+                'lapTime': float(lap['LapTime']) if pd.notna(lap['LapTime']) else None,
+                'stint': int(lap['Stint']) if pd.notna(lap['Stint']) else None,
+                'compound': str(lap['Compound']) if pd.notna(lap['Compound']) else None,
+                'modelObservation': False,
+                'hmmStateProbabilities': None,
+                'hmmNoAgeStateProbabilities': None,
+                'hmmAlarm': False,
+                'hmmNoAgeAlarm': False,
+                'tyreAgeAlarm': False,
+                'logisticAlarm': False,
+                'logisticPositive': False,
+                'tyreAgeNorm': None,
+                'actualPit': lap_number in actual_pits,
+            }
+        explorer_drivers[race_key] = {
+            'actualPitLaps': actual_pits,
+            'laps': timeline,
+        }
 
     results = []
     predictions_by_method: dict[str, dict[tuple, list[int]]] = {
@@ -774,6 +952,7 @@ def run_evaluate(
             race_mask &= test_data[column].eq(value)
         race_driver = test_data.loc[race_mask]
         actual = actual_by_race.get(race_key, [])
+        explorer = explorer_drivers.get(race_key)
         predictions: dict[str, list[int]] = {
             'HMM': [],
             'HMMNoAge': [],
@@ -790,12 +969,25 @@ def run_evaluate(
             logistic_flags = logistic.predict(
                 pd.DataFrame(observations, columns=FEATURE_COLUMNS)
             ).astype(bool)
-            predictions['Logistic'].extend(_boolean_entries(logistic_flags, laps))
+            logistic_alarm_laps = _boolean_entries(logistic_flags, laps)
+            predictions['Logistic'].extend(logistic_alarm_laps)
+            if explorer is not None:
+                for lap_number, alarm in zip(laps, logistic_flags):
+                    explorer['laps'][int(lap_number)]['modelObservation'] = True
+                    explorer['laps'][int(lap_number)]['logisticPositive'] = bool(alarm)
+                for lap_number in logistic_alarm_laps:
+                    explorer['laps'][lap_number]['logisticAlarm'] = True
 
             age_values = observations[:, FEATURE_COLUMNS.index('tyre_age_norm')]
-            predictions['TyreAge'].extend(
-                _first_threshold_entry(age_values, laps, tyre_age_threshold)
+            tyre_age_alarm_laps = _first_threshold_entry(
+                age_values, laps, tyre_age_threshold
             )
+            predictions['TyreAge'].extend(tyre_age_alarm_laps)
+            if explorer is not None:
+                for lap_number, age in zip(laps, age_values):
+                    explorer['laps'][int(lap_number)]['tyreAgeNorm'] = float(age)
+                for lap_number in tyre_age_alarm_laps:
+                    explorer['laps'][lap_number]['tyreAgeAlarm'] = True
 
             for method, threshold in (
                 ('HMM', hmm_threshold),
@@ -809,9 +1001,21 @@ def run_evaluate(
                 filtered = bundle['model'].filter(
                     bundle['scaler'].transform(hmm_observations)
                 )
-                predictions[method].extend(
-                    _first_threshold_entry(filtered[:, -1], laps, threshold)
-                )
+                alarm_laps = _first_threshold_entry(filtered[:, -1], laps, threshold)
+                predictions[method].extend(alarm_laps)
+                if explorer is not None:
+                    probability_key = (
+                        'hmmStateProbabilities'
+                        if method == 'HMM'
+                        else 'hmmNoAgeStateProbabilities'
+                    )
+                    alarm_key = 'hmmAlarm' if method == 'HMM' else 'hmmNoAgeAlarm'
+                    for lap_number, probabilities in zip(laps, filtered):
+                        explorer['laps'][int(lap_number)][probability_key] = [
+                            float(probability) for probability in probabilities
+                        ]
+                    for lap_number in alarm_laps:
+                        explorer['laps'][lap_number][alarm_key] = True
                 if method == 'HMM':
                     states = filtered.argmax(axis=1)
                     state_trace.update(
@@ -870,6 +1074,27 @@ def run_evaluate(
     pooled_df = pd.DataFrame(pooled_rows)
     pooled_df.to_csv(POOLED_RESULTS_CSV, index=False)
     pd.DataFrame(timing_rows).to_csv(TIMING_DELTAS_CSV, index=False)
+    if test_year == FINAL_TEST_YEAR:
+        for driver_data in explorer_drivers.values():
+            latest_probabilities = None
+            latest_no_age_probabilities = None
+            active_stint = None
+            for lap_number in sorted(driver_data['laps']):
+                lap_data = driver_data['laps'][lap_number]
+                if lap_data['stint'] != active_stint:
+                    active_stint = lap_data['stint']
+                    latest_probabilities = None
+                    latest_no_age_probabilities = None
+                if lap_data['hmmStateProbabilities'] is not None:
+                    latest_probabilities = lap_data['hmmStateProbabilities']
+                elif latest_probabilities is not None:
+                    lap_data['hmmStateProbabilities'] = latest_probabilities
+                if lap_data['hmmNoAgeStateProbabilities'] is not None:
+                    latest_no_age_probabilities = lap_data['hmmNoAgeStateProbabilities']
+                elif latest_no_age_probabilities is not None:
+                    lap_data['hmmNoAgeStateProbabilities'] = latest_no_age_probabilities
+        _write_race_explorer_json(explorer_drivers, hmm_threshold, tyre_age_threshold)
+        print(f'Saved 2024 race explorer data to {RACE_EXPLORER_JSON}')
     print(f'Saved per-driver-race results to {RESULTS_CSV}')
     print(f'Saved pooled metrics and tolerance sensitivity to {POOLED_RESULTS_CSV}')
     print(f'Saved one-to-one prediction timing deltas to {TIMING_DELTAS_CSV}')
