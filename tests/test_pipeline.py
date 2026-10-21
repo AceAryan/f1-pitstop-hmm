@@ -246,10 +246,10 @@ class FeaturePipelineTests(unittest.TestCase):
                 _write_validation_metrics_json(pd.DataFrame(rows), config)
                 _write_race_explorer_json({
                     (2024, 'Bahrain Grand Prix', 'VER'): {
-                        'actualPitLaps': [4],
+                        'actualPitLaps': [np.int64(4)],
                         'laps': {
                             2: {
-                                'lapNumber': 2,
+                                'lapNumber': np.int64(2),
                                 'lapTime': 91.2,
                                 'hmmStateProbabilities': [0.2, 0.8],
                                 'hmmAlarm': True,

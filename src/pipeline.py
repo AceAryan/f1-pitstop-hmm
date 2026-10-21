@@ -250,8 +250,20 @@ def _save_model_bundles(bundles: dict[str, dict], model_name: str) -> list[str]:
 def _write_json(path: str, payload: dict) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as output:
-        json.dump(payload, output, indent=2, allow_nan=False)
+        json.dump(
+            payload,
+            output,
+            indent=2,
+            allow_nan=False,
+            default=_json_default,
+        )
         output.write('\n')
+
+
+def _json_default(value: object) -> object:
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
 
 
 def _write_validation_metrics_json(tuning: pd.DataFrame, config: dict) -> None:
