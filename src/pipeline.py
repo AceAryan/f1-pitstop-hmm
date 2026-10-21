@@ -11,19 +11,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import fastf1
 from scipy.optimize import linear_sum_assignment
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from src.data_loader import load_race
+from data.kaggle_loader import load_season
 from src.features import (
     FEATURE_COLUMNS,
     FEATURE_VERSION,
     RACE_COLUMNS,
     STINT_COLUMNS,
-    build_observation_matrix,
     get_stint_records,
     scale_features,
 )
@@ -32,6 +30,8 @@ from src.hmm import GaussianHMM
 
 DATA_PATH = 'data/processed.csv'
 RAW_LAPS_PATH = 'data/race_laps.csv'
+DATA_DIR = 'data/kaggle/'
+PROCESSED_DIR = 'data/processed'
 MODELS_DIR = 'results/models'
 PLOTS_DIR = 'results/plots'
 RESULTS_CSV = 'results/evaluation_summary.csv'
@@ -39,19 +39,18 @@ POOLED_RESULTS_CSV = 'results/evaluation_pooled_summary.csv'
 TIMING_DELTAS_CSV = 'results/prediction_timing_deltas.csv'
 TUNING_RESULTS_CSV = 'results/validation_tuning.csv'
 TUNING_CONFIG_PATH = 'results/validation_tuning.pkl'
-FINAL_TEST_MARKER = 'results/final_test_2024.complete'
+FINAL_TEST_MARKER = 'results/final_test_2020.complete'
 SITE_DATA_DIR = 'results/site-data'
-RACE_EXPLORER_JSON = os.path.join(SITE_DATA_DIR, 'race-explorer-2024.json')
+RACE_EXPLORER_JSON = os.path.join(SITE_DATA_DIR, 'race-explorer-2020.json')
 VALIDATION_METRICS_JSON = os.path.join(
-    SITE_DATA_DIR, 'validation-threshold-metrics-2023.json'
+    SITE_DATA_DIR, 'validation-threshold-metrics-2019.json'
 )
 
-DEFAULT_SEASONS = (2020, 2021, 2022, 2023)
+TRAINING_SEASONS = tuple(range(2011, 2019))
+VALIDATION_YEAR = 2019
+FINAL_TEST_YEAR = 2020
 COMPOUNDS = ('SOFT', 'MEDIUM', 'HARD')
 PIT_LOOKAHEAD_LAPS = 3
-TRAINING_SEASONS = (2020, 2021, 2022)
-VALIDATION_YEAR = 2023
-FINAL_TEST_YEAR = 2024
 HMM_STATE_CANDIDATES = (2, 3, 4)
 HMM_ALARM_THRESHOLDS = tuple(round(value / 10, 1) for value in range(3, 10))
 TYRE_AGE_THRESHOLDS = tuple(round(value / 100, 2) for value in range(60, 100, 5))
@@ -59,89 +58,41 @@ DEFAULT_HMM_ALARM_THRESHOLD = 0.5
 DEFAULT_TYRE_AGE_THRESHOLD = 0.8
 
 
-def _get_season_races(years: list[int]) -> list[tuple[int, str]]:
-    races = []
-    for season in years:
-        schedule = fastf1.get_event_schedule(season, include_testing=False)
-        races.extend(
-            (season, str(event_name))
-            for event_name in schedule['EventName'].dropna()
-        )
-    return races
+def run_preprocess() -> None:
+    """Build the fixed chronological Kaggle train/validation/test datasets."""
+    split_seasons = {
+        'train': TRAINING_SEASONS,
+        'val': (VALIDATION_YEAR,),
+        'test': (FINAL_TEST_YEAR,),
+    }
+    split_frames = {}
+    raw_frames = []
+    race_count = 0
+    raw_lap_count = 0
+    for split, seasons in split_seasons.items():
+        frames = []
+        for season in seasons:
+            season_data, season_raw = load_season(season, DATA_DIR, include_raw=True)
+            race_count += int(season_data.attrs.get('race_count', season_data['RaceId'].nunique()))
+            raw_lap_count += int(season_data.attrs.get('raw_lap_count', len(season_data)))
+            frames.append(season_data)
+            raw_frames.append(season_raw)
+        split_frames[split] = pd.concat(frames, ignore_index=True)
 
-
-def run_preprocess(
-    year: int | None = None,
-    gp: list[str] | None = None,
-    years: list[int] | None = None,
-) -> None:
-    if years and year:
-        raise ValueError('Choose either --year or --years, not both.')
-    if year and gp:
-        races = [(year, name) for name in gp]
-    elif years:
-        races = _get_season_races(years)
-    elif year:
-        races = _get_season_races([year])
-    else:
-        races = _get_season_races(list(DEFAULT_SEASONS))
-
-    print(f'Loading races: {races}')
-    os.makedirs('data', exist_ok=True)
-    frames = []
-    loaded_races = []
-    skipped_races = []
-    wet_races = []
-    for race_year, name in races:
-        try:
-            laps_df = load_race(race_year, name)
-            compounds_used = set(
-                laps_df['Compound'].str.upper().dropna().unique()
-            )
-            if compounds_used & {'INTERMEDIATE', 'WET'}:
-                wet_races.append((race_year, name))
-                print(
-                    f'  Excluding {race_year} {name}: '
-                    'intermediate or wet-compound tyres were used.'
-                )
-                continue
-            frames.append(laps_df)
-            loaded_races.append((race_year, name))
-        except Exception as error:
-            skipped_races.append((race_year, name))
-            print(f'  Skipping {race_year} {name}: {error}')
-    if not frames:
-        if wet_races and not skipped_races:
-            raise RuntimeError(
-                'No dry races loaded; every successfully loaded race used '
-                'intermediate or wet-compound tyres.'
-            )
-        raise RuntimeError(
-            'No dry races loaded. Check the FastF1 cache, network access, and '
-            'whether the requested races used dry-compound tyres.'
-        )
-
-    raw_laps = pd.concat(frames, ignore_index=True)
-    raw_laps.to_csv(RAW_LAPS_PATH, index=False)
-    features = build_observation_matrix(raw_laps)
+    features = pd.concat(split_frames.values(), ignore_index=True)
+    raw_laps = pd.concat(raw_frames, ignore_index=True)
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+    for split, frame in split_frames.items():
+        frame.to_pickle(os.path.join(PROCESSED_DIR, f'{split}.pkl'))
     features.to_csv(DATA_PATH, index=False)
-    loaded_by_year: dict[int, int] = defaultdict(int)
-    for season, _ in loaded_races:
-        loaded_by_year[season] += 1
-    print(
-        f'Saved {len(features)} clean lap observations from {len(loaded_races)} '
-        f'of {len(races)} requested races to {DATA_PATH}.'
-    )
-    print(f'Saved {len(raw_laps)} dry-race lap records to {RAW_LAPS_PATH}.')
-    print(f'Loaded races by season: {dict(sorted(loaded_by_year.items()))}')
-    if wet_races:
-        print(f'Excluded {len(wet_races)} races with intermediate or wet tyres.')
-    if skipped_races:
-        print(
-            f'WARNING: {len(skipped_races)} race sessions failed to load; '
-            'the processed CSV and downstream evaluation cover only the '
-            'successfully loaded sessions.'
-        )
+    raw_laps.to_csv(RAW_LAPS_PATH, index=False)
+    stint_count = features.groupby(STINT_COLUMNS, dropna=False).ngroups
+    print(f'Races loaded: {race_count}')
+    print(f'Total raw laps: {raw_lap_count}')
+    print(f'Total clean laps: {len(features)}')
+    print(f'Total stints: {stint_count}')
+    print(f'Saved processed observations to {DATA_PATH}.')
+    print(f'Saved train/val/test pickle splits to {PROCESSED_DIR}.')
 
 
 def _load_data() -> pd.DataFrame:
@@ -186,6 +137,24 @@ def _feature_columns(include_tyre_age: bool = True) -> list[str]:
         column for column in FEATURE_COLUMNS
         if include_tyre_age or column != 'tyre_age_norm'
     ]
+
+
+def _resolve_compounds(data: pd.DataFrame, requested: list[str]) -> list[str]:
+    """Use UNKNOWN when the source data has no requested compound labels."""
+    available = set(data['Compound'].dropna().astype(str).str.upper())
+    supported = [compound for compound in requested if compound in available]
+    if supported:
+        return supported
+    if 'UNKNOWN' in available:
+        print(
+            'No requested tyre compounds are available in the data; '
+            'training the UNKNOWN compound model instead.'
+        )
+        return ['UNKNOWN']
+    raise ValueError(
+        f'None of the requested compounds {requested} are present in the data; '
+        f'found {sorted(available)}.'
+    )
 
 
 def _group_records(records: list[dict]) -> dict[tuple, list[dict]]:
@@ -388,9 +357,9 @@ def _write_race_explorer_json(
 
 
 def run_tune(n_iter: int = 50, compounds: list[str] | None = None) -> dict:
-    """Tune on 2023 only; all candidate models are fit on 2020–2022."""
+    """Tune on 2019 only; all candidate models are fit on 2011–2018."""
     if os.path.exists(FINAL_TEST_MARKER):
-        raise RuntimeError('The 2024 final test has already run; do not retune afterward.')
+        raise RuntimeError('The 2020 final test has already run; do not retune afterward.')
     data = _load_data()
     required_years = set(TRAINING_SEASONS) | {VALIDATION_YEAR}
     available_years = set(data['Year'].unique())
@@ -403,7 +372,10 @@ def run_tune(n_iter: int = 50, compounds: list[str] | None = None) -> dict:
     validation_data = data[data['Year'].eq(VALIDATION_YEAR)].copy()
     validation_groups = _group_records(get_stint_records(validation_data, min_laps=1))
     actual_by_race = _actual_pits_by_race(validation_data)
-    requested = [compound.upper() for compound in (compounds or COMPOUNDS)]
+    requested = _resolve_compounds(
+        train_data,
+        [compound.upper() for compound in (compounds or COMPOUNDS)],
+    )
     tuning_rows = []
 
     for include_tyre_age, method in ((True, 'HMM'), (False, 'HMMNoAge')):
@@ -506,7 +478,7 @@ def run_tune(n_iter: int = 50, compounds: list[str] | None = None) -> dict:
     with open(TUNING_CONFIG_PATH, 'wb') as config_file:
         pickle.dump(config, config_file)
     _write_validation_metrics_json(tuning, config)
-    print(f'Saved 2023 tuning results to {TUNING_RESULTS_CSV}')
+    print(f'Saved 2019 tuning results to {TUNING_RESULTS_CSV}')
     print(f'Saved selected configuration to {TUNING_CONFIG_PATH}')
     print(f'Saved validation slider data to {VALIDATION_METRICS_JSON}')
     return config
@@ -522,6 +494,7 @@ def run_train(
     test_year = _resolve_test_year(data, test_year)
     requested = [compound.upper() for compound in (compounds or COMPOUNDS)]
     train_data = data[data['Year'] < test_year].copy()
+    requested = _resolve_compounds(train_data, requested)
     tuned_config = None
     final_fit = test_year == FINAL_TEST_YEAR
     if final_fit:
@@ -532,17 +505,17 @@ def run_train(
             )
         if not os.path.exists(TUNING_CONFIG_PATH):
             raise FileNotFoundError(
-                f'{TUNING_CONFIG_PATH} not found; run --tune on 2023 before final training.'
+                f'{TUNING_CONFIG_PATH} not found; run --tune on 2019 before final training.'
             )
         with open(TUNING_CONFIG_PATH, 'rb') as config_file:
             tuned_config = pickle.load(config_file)
         if tuned_config.get('validation_year') != VALIDATION_YEAR:
-            raise ValueError('Tuning configuration is not for the required 2023 validation season.')
+            raise ValueError('Tuning configuration is not for the required 2019 validation season.')
         if set(tuned_config.get('training_years', [])) != set(TRAINING_SEASONS):
-            raise ValueError('Tuning configuration was not fit on exactly 2020–2022.')
+            raise ValueError('Tuning configuration was not fit on exactly 2011–2018.')
         if set(tuned_config.get('compounds', [])) != set(requested):
             raise ValueError(
-                'Final model compounds differ from the compounds used during 2023 tuning.'
+                'Final model compounds differ from the compounds used during 2019 tuning.'
             )
         full_states = int(tuned_config['hmm_states'])
         no_age_states = int(tuned_config['hmm_no_age_states'])
@@ -551,7 +524,7 @@ def run_train(
         train_data = data[data['Year'].isin(final_training_years)].copy()
         train_years = set(train_data['Year'].unique())
         if set(final_training_years) != train_years:
-            raise ValueError('Final 2024 training requires seasons 2020 through 2023.')
+            raise ValueError('Final 2020 training requires seasons 2011 through 2019.')
     else:
         if n_states < 2:
             raise ValueError('HMM must have at least 2 states.')
@@ -772,6 +745,12 @@ def _load_models(test_year: int) -> tuple[dict[str, dict[str, dict]], object, di
                 raise FileNotFoundError(f'{path} is missing; retrain for test season {test_year}.')
             with open(path, 'rb') as model_file:
                 bundle = pickle.load(model_file)
+            bundle_features = bundle.get('feature_columns', [])
+            if not bundle_features or not set(bundle_features).issubset(FEATURE_COLUMNS):
+                raise ValueError(
+                    f'{path} uses an outdated feature schema; retrain with the '
+                    'current processed data before evaluation.'
+                )
             if bundle.get('test_year') != test_year:
                 raise ValueError(
                     f'{path} was trained for test season {bundle.get("test_year")}; '
@@ -784,6 +763,11 @@ def _load_models(test_year: int) -> tuple[dict[str, dict[str, dict]], object, di
         raise FileNotFoundError(f'{baseline_path} not found; run with --train first.')
     with open(baseline_path, 'rb') as model_file:
         baseline_bundle = pickle.load(model_file)
+    if baseline_bundle.get('feature_columns') != FEATURE_COLUMNS:
+        raise ValueError(
+            f'{baseline_path} uses an outdated feature schema; retrain with the '
+            'current processed data before evaluation.'
+        )
     if baseline_bundle.get('test_year') != test_year:
         raise ValueError(
             f'{baseline_path} was trained for test season '
@@ -872,7 +856,7 @@ def run_evaluate(
         )
     if test_year == FINAL_TEST_YEAR and (drivers is not None or tolerance != 2):
         raise ValueError(
-            'The one-time 2024 test must include all drivers and use the '
+            'The one-time 2020 test must include all drivers and use the '
             'predeclared +/-2 primary tolerance; +/-1 and +/-3 are reported automatically.'
         )
     test_data = data[data['Year'] == test_year].copy()
@@ -886,8 +870,8 @@ def run_evaluate(
     models, logistic, metadata = _load_models(test_year)
     if test_year == FINAL_TEST_YEAR and not metadata.get('final_fit'):
         raise ValueError(
-            '2024 final evaluation requires models refit on 2020–2023 '
-            'using the saved 2023 tuning configuration.'
+            '2020 final evaluation requires models refit on 2011–2019 '
+            'using the saved 2019 tuning configuration.'
         )
     explorer_source = (
         _load_raw_laps(test_year)
@@ -1094,7 +1078,7 @@ def run_evaluate(
                 elif latest_no_age_probabilities is not None:
                     lap_data['hmmNoAgeStateProbabilities'] = latest_no_age_probabilities
         _write_race_explorer_json(explorer_drivers, hmm_threshold, tyre_age_threshold)
-        print(f'Saved 2024 race explorer data to {RACE_EXPLORER_JSON}')
+        print(f'Saved 2020 race explorer data to {RACE_EXPLORER_JSON}')
     print(f'Saved per-driver-race results to {RESULTS_CSV}')
     print(f'Saved pooled metrics and tolerance sensitivity to {POOLED_RESULTS_CSV}')
     print(f'Saved one-to-one prediction timing deltas to {TIMING_DELTAS_CSV}')

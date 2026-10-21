@@ -6,7 +6,9 @@ from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+from fastf1.exceptions import DataNotLoadedError, RateLimitExceededError
 
+from src.data_loader import load_race
 from src.features import FEATURE_COLUMNS, build_observation_matrix, get_stint_records
 from src.hmm import GaussianHMM
 from src.pipeline import (
@@ -58,6 +60,24 @@ def _lap(
 
 
 class FeaturePipelineTests(unittest.TestCase):
+    def test_loader_explains_fastf1_soft_failure_when_laps_are_unavailable(self):
+        session = unittest.mock.Mock()
+        session.laps.copy.side_effect = DataNotLoadedError(
+            'The data you are trying to access has not been loaded yet.'
+        )
+
+        with patch('src.data_loader.fastf1.get_session', return_value=session):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                'did not load lap timing data.*FASTF1_DEBUG=1',
+            ) as error:
+                load_race(2023, 'Singapore Grand Prix')
+
+        self.assertIsInstance(error.exception.__cause__, DataNotLoadedError)
+        session.load.assert_called_once_with(
+            telemetry=False, weather=False, messages=False
+        )
+
     def test_filters_dirty_laps_and_keeps_race_lap_pit_targets(self):
         rows = []
         for year, base_time in ((2022, 100.0), (2023, 90.0)):
@@ -440,6 +460,85 @@ class FeaturePipelineTests(unittest.TestCase):
 
         self.assertEqual(processed['GrandPrix'].unique().tolist(), ['Dry Grand Prix'])
         self.assertEqual(raw_laps['GrandPrix'].unique().tolist(), ['Dry Grand Prix'])
+
+    def test_preprocessing_resumes_from_saved_race_laps(self):
+        first_race = pd.DataFrame([
+            _lap(2023, 'First Grand Prix', 'VER', lap, 1, 100.0 + lap)
+            for lap in range(1, 5)
+        ])
+        second_race = pd.DataFrame([
+            _lap(2023, 'Second Grand Prix', 'VER', lap, 1, 100.0 + lap)
+            for lap in range(1, 5)
+        ])
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'processed.csv'
+            raw_path = Path(directory) / 'raw_laps.csv'
+            with (
+                patch('src.pipeline._get_season_races', return_value=[
+                    (2023, 'First Grand Prix'),
+                    (2023, 'Second Grand Prix'),
+                ]),
+                patch(
+                    'src.pipeline.load_race',
+                    side_effect=[
+                        first_race,
+                        RuntimeError('temporary fetch failure'),
+                        second_race,
+                    ],
+                ) as load_race,
+                patch('src.pipeline.DATA_PATH', str(path)),
+                patch('src.pipeline.RAW_LAPS_PATH', str(raw_path)),
+            ):
+                run_preprocess(years=[2023])
+                run_preprocess(years=[2023])
+
+            processed = pd.read_csv(path)
+            raw_laps = pd.read_csv(raw_path)
+
+        self.assertEqual(load_race.call_count, 3)
+        self.assertEqual(
+            set(processed['GrandPrix'].unique()),
+            {'First Grand Prix', 'Second Grand Prix'},
+        )
+        self.assertEqual(
+            set(raw_laps['GrandPrix'].unique()),
+            {'First Grand Prix', 'Second Grand Prix'},
+        )
+
+    def test_preprocessing_stops_on_rate_limit_and_saves_checkpoint(self):
+        first_race = pd.DataFrame([
+            _lap(2023, 'First Grand Prix', 'VER', lap, 1, 100.0 + lap)
+            for lap in range(1, 5)
+        ])
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'processed.csv'
+            raw_path = Path(directory) / 'raw_laps.csv'
+            with (
+                patch('src.pipeline._get_season_races', return_value=[
+                    (2023, 'First Grand Prix'),
+                    (2023, 'Rate Limited Grand Prix'),
+                    (2023, 'Not Attempted Grand Prix'),
+                ]),
+                patch(
+                    'src.pipeline.load_race',
+                    side_effect=[
+                        first_race,
+                        RateLimitExceededError('500 calls/h'),
+                    ],
+                ) as load_race,
+                patch('src.pipeline.DATA_PATH', str(path)),
+                patch('src.pipeline.RAW_LAPS_PATH', str(raw_path)),
+            ):
+                run_preprocess(years=[2023])
+
+            processed = pd.read_csv(path)
+            raw_laps = pd.read_csv(raw_path)
+
+        self.assertEqual(load_race.call_count, 2)
+        self.assertEqual(processed['GrandPrix'].unique().tolist(), ['First Grand Prix'])
+        self.assertEqual(raw_laps['GrandPrix'].unique().tolist(), ['First Grand Prix'])
 
 
 if __name__ == '__main__':

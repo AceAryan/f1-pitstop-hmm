@@ -5,43 +5,37 @@ predictions against two baselines: a tyre-age threshold and logistic regression.
 
 ## Pipeline
 
-The single entry point is `main.py`; processed observations use CSV throughout.
+The single entry point is `main.py`; processed observations use CSV for the
+existing training/evaluation pipeline and pickle files for the season splits.
 
 ```text
-python main.py --preprocess --years 2020 2021 2022 2023 2024
-python main.py --tune                           # fit on 2020-2022; select using 2023 only
-python main.py --train --test_year 2024         # refit on 2020-2023 using selected settings
-python main.py --evaluate --test_year 2024      # one-time final test
-python main.py --preprocess --year 2022 --gp Bahrain Monaco
+python main.py --preprocess
+python main.py --tune                           # fit on 2011-2018; select using 2019 only
+python main.py --train --test_year 2020         # refit on 2011-2019 using selected settings
+python main.py --evaluate --test_year 2020      # one-time final test
 ```
 
-The final experiment is chronological: candidate models are fit on 2020–2022,
-all threshold and state-count selection uses 2023, and final models are refit
-on 2020–2023 before the 2024 test is evaluated once. `--tune` selects the
+The final experiment is chronological: candidate models are fit on 2011–2018,
+all threshold and state-count selection uses 2019, and final models are refit
+on 2011–2019 before the 2020 test is evaluated once. `--tune` selects the
 terminal-state posterior threshold (0.3–0.9), tyre-age threshold (0.60–0.95),
-and state count (2, 3, or 4) by pooled 2023 F1 at +/-2 laps. It also tunes the
+and state count (2, 3, or 4) by pooled 2019 F1 at +/-2 laps. It also tunes the
 no-tyre-age HMM ablation on the same validation season. Fitted scalers and
-models use training seasons only. The 2024 final evaluation is guarded against
-repeat runs; it requires final models trained with the saved 2023 configuration.
-Preprocessing defaults to dry-tyre races in 2020–2023; pass `--years` to add
-2024 or select another scope. It writes clean observations to
-`data/processed.csv` and preserves all loaded laps from dry races in
-`data/race_laps.csv` for full-race timelines.
+models use training seasons only. The 2020 final evaluation is guarded against
+repeat runs; it requires final models trained with the saved 2019 configuration.
+Preprocessing writes `data/processed/train.pkl`, `val.pkl`, and `test.pkl`, as
+well as the combined CSV used by training and evaluation. It also preserves
+complete dry-race lap records in `data/race_laps.csv` for the race explorer.
 
-FastF1 observations are grouped by **Year, Grand Prix, Driver, and FastF1 Stint**.
-The pipeline retains real `LapNumber` values and pit-in lap targets, while
-excluding pit-in/out laps, inaccurate laps, and non-green track-status laps from
-model observations. Entire races are excluded before stint extraction if any
-driver used intermediate or wet-compound tyres. It also excludes the first
-valid lap after each subsequent stint boundary, since FastF1 may omit
-`PitOutTime` or the pit-exit lap may have no valid lap time. Extreme lap-time
-outliers (over 1.35 times that driver's expanding median of prior clean laps)
-are removed without using future lap times. Laps missing a compound or valid
-tyre age are excluded rather than assigned a fresh-tyre age. Lap-time and
-sector deltas use only the best time observed up to that lap; they do not use
-future laps from the stint. Regenerate existing processed data with
-`--preprocess`; older or feature-version-mismatched CSV files are rejected with
-an actionable error.
+Ergast observations are grouped by **Year, Grand Prix, Driver, and inferred
+stint**. The pipeline retains real lap numbers and pit targets, excludes
+pit-in/out laps and the first race lap, and removes lap times over 1.35 times
+the driver's median in that race. Entire races with known intermediate or wet
+compounds are excluded. When compound data is unavailable, compound is marked
+`UNKNOWN` and tyre age is inferred from stint lap counts. Lap-time delta and
+rolling degradation use only lap times from the current stint. Ergast has no
+sector times, so the feature vector contains three features. Regenerate
+processed data with `--preprocess` after changing the source CSVs.
 
 ## Hidden states and prediction
 
@@ -59,11 +53,11 @@ decoding, so a prediction never uses future laps from the same stint.
 
 ## Baselines and output
 
-- **Tyre-age rule:** predict once per stint at the threshold selected on 2023.
+- **Tyre-age rule:** predict once per stint at the threshold selected on 2019.
 - **Logistic regression:** predict within a three-lap horizon, trained using
   training-season pit targets.
 - **HMM:** predict when forward-filtered probability of the final state crosses
-  its 2023-selected alarm threshold.
+  its 2019-selected alarm threshold.
 - **HMM ablation:** the same state model without normalized tyre age as an
   observation, to measure whether lap-degradation signals add value beyond
   tyre-age counting.
@@ -77,11 +71,11 @@ Results are written to `results/evaluation_summary.csv`,
 `results/evaluation_pooled_summary.csv`, and
 `results/prediction_timing_deltas.csv`. Validation grid scores are saved to
 `results/validation_tuning.csv`. `--tune` also exports
-`results/site-data/validation-threshold-metrics-2023.json`, containing the
+`results/site-data/validation-threshold-metrics-2019.json`, containing the
 Python-computed pooled metric curve for each tuned threshold. A successful
-`--evaluate --test_year 2024` exports
-`results/site-data/race-explorer-2024.json`, with race/driver timelines,
-per-lap forward-filtered state probabilities, all available raw lap times,
+`--evaluate --test_year 2020` exports
+`results/site-data/race-explorer-2020.json`, with race/driver timelines,
+per-lap forward-filtered state probabilities, available lap times,
 HMM and baseline alarm flags, model-observation markers, and actual pit laps.
 On laps excluded from model observations, probabilities carry forward from the
 latest observation in that stint; the model-observation marker distinguishes
@@ -94,18 +88,19 @@ scalers are under `results/models/`; plots are under `results/plots/`.
 ```text
 f1-pitstop-hmm/
 ├── main.py                  # Single CLI entry point
+├── data/
+│   ├── kaggle_loader.py     # Kaggle Ergast CSV loader
+│   ├── kaggle/              # Downloaded source CSVs (gitignored)
+│   └── processed/           # Train/validation/test pickle splits
 ├── src/
-│   ├── data_loader.py       # FastF1 data fetching and cache
 │   ├── features.py          # Filtering, feature engineering, stint grouping
 │   ├── hmm.py               # Gaussian HMM, Baum-Welch, forward filtering
 │   └── pipeline.py          # Season split, training, baselines, evaluation
 ├── tests/
 │   └── test_pipeline.py     # Regression tests for grouping, filtering, and HMM
-├── data/                    # Processed CSV (gitignored)
 ├── results/
 │   ├── models/              # Trained models and scalers (gitignored)
 │   └── plots/               # Evaluation and transition plots
-├── cache/                   # FastF1 cache (gitignored)
 └── requirements.txt
 ```
 
@@ -118,21 +113,26 @@ pip install -r requirements.txt
 python main.py --help
 ```
 
-FastF1 caches downloaded sessions locally. The explicit preprocessing command
-downloads the selected race calendars; subsequent runs reuse the cache.
+Download the [Kaggle Formula 1 World Championship dataset](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020),
+unzip the CSV files into `data/kaggle/`, then run:
+
+```bash
+python main.py --preprocess
+```
+
+The required files are `lap_times.csv`, `pit_stops.csv`, `races.csv`, and
+`results.csv`. If available, `tyres.csv` provides compound and tyre-life
+metadata; otherwise compounds are marked `UNKNOWN` and tyre age is inferred.
 
 ## CLI options
 
 | Option | Description |
 |---|---|
-| `--preprocess` | Fetch data and create `data/processed.csv` |
-| `--tune` | Tune thresholds and state count on 2023; fit candidates on 2020–2022 |
-| `--train` | Train before `--test_year`; for 2024, refit with the selected 2023 settings |
-| `--evaluate` | Evaluate the held-out `--test_year`; the 2024 final test runs once |
-| `--year` | Season to use with preprocessing |
-| `--years` | Complete seasons to use with preprocessing |
-| `--gp` | Grand Prix names to use with preprocessing |
-| `--test_year` | Held-out season; defaults to the latest available season |
+| `--preprocess` | Process Kaggle CSVs into train/validation/test splits |
+| `--tune` | Tune thresholds and state count on 2019; fit candidates on 2011–2018 |
+| `--train` | Train before `--test_year`; for 2020, refit with selected 2019 settings |
+| `--evaluate` | Evaluate the held-out `--test_year`; the 2020 final test runs once |
+| `--test_year` | Held-out season (default: 2020) |
 | `--compounds` | HMM compounds (default: `SOFT MEDIUM HARD`) |
 | `--n_iter` | Baum-Welch iterations (default: 50) |
 | `--n_states` | States for non-final training (2, 3, or 4) |

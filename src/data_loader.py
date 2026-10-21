@@ -8,6 +8,7 @@ Caches locally so repeated runs are fast.
 import fastf1
 import pandas as pd
 import os
+from fastf1.exceptions import DataNotLoadedError
 
 # Point FastF1 to local cache — create directory if it doesn't exist
 CACHE_DIR = os.path.join(os.path.dirname(__file__), '..', 'cache')
@@ -31,7 +32,19 @@ def load_race(year: int, round_name: str, session_type: str = 'R') -> pd.DataFra
     session = fastf1.get_session(year, round_name, session_type)
     session.load(telemetry=False, weather=False, messages=False)
 
-    laps = session.laps.copy()
+    try:
+        laps = session.laps.copy()
+    except DataNotLoadedError as error:
+        raise RuntimeError(
+            f"FastF1 did not load lap timing data for {year} {round_name} "
+            f"({session_type}). Check the FastF1 warnings above; to expose the "
+            "underlying endpoint exception, rerun with FASTF1_DEBUG=1."
+        ) from error
+    if laps.empty:
+        raise RuntimeError(
+            f"FastF1 loaded no lap records for {year} {round_name} "
+            f"({session_type}). Check the FastF1 warnings above."
+        )
 
     # Keep only relevant columns
     cols = [

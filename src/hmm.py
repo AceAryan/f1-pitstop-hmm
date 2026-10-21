@@ -15,11 +15,13 @@ Math reference:
 """
 
 import numpy as np
+from scipy.special import logsumexp
 from scipy.stats import multivariate_normal
 
 
 STATE_NAMES = {0: 'FRESH', 1: 'DEGRADING', 2: 'CRITICAL'}
 N_STATES = 3
+MIN_COVARIANCE_EIGENVALUE = 1e-3
 
 
 class GaussianHMM:
@@ -70,104 +72,63 @@ class GaussianHMM:
         chunks = np.array_split(ordered, self.n_states)
         self.mu = np.array([chunk.mean(axis=0) for chunk in chunks])
         self.sigma = np.array([
-            (np.atleast_2d(np.cov(chunk.T)) if len(chunk) > 1 else np.eye(n_features))
-            + np.eye(n_features) * 1e-3
+            self._regularize_covariance(
+                np.atleast_2d(np.cov(chunk.T)) if len(chunk) > 1 else np.eye(n_features)
+            )
             for chunk in chunks
         ])
+
+    @staticmethod
+    def _regularize_covariance(covariance: np.ndarray) -> np.ndarray:
+        """Symmetrize a covariance matrix and bound its eigenvalues away from zero."""
+        covariance = (covariance + covariance.T) / 2
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+        eigenvalues = np.maximum(eigenvalues, MIN_COVARIANCE_EIGENVALUE)
+        return (eigenvectors * eigenvalues) @ eigenvectors.T
 
     # ------------------------------------------------------------------
     # Emission probability
     # ------------------------------------------------------------------
 
-    def _emission_prob(self, obs: np.ndarray) -> np.ndarray:
-        """
-        Compute B[j, t] = P(o_t | state=j) for all states and timesteps.
-
-        Uses multivariate Gaussian:
-            P(o | μ, Σ) = (2π)^(-d/2) |Σ|^(-1/2) exp(-0.5 (o-μ)^T Σ^{-1} (o-μ))
-
-        Args:
-            obs: shape (T, n_features)
-        Returns:
-            B: shape (T, n_states)  — emission probs at each timestep
-        """
-        T = obs.shape[0]
-        B = np.zeros((T, self.n_states))
+    def _log_emission_prob(self, obs: np.ndarray) -> np.ndarray:
+        """Return Gaussian log-emission probabilities with shape (T, n_states)."""
+        log_B = np.zeros((len(obs), self.n_states))
         for j in range(self.n_states):
-            B[:, j] = multivariate_normal.pdf(obs, mean=self.mu[j], cov=self.sigma[j])
-        # Avoid zero probabilities (numerical safety)
-        B = np.clip(B, 1e-300, None)
-        return B
+            log_B[:, j] = multivariate_normal.logpdf(
+                obs, mean=self.mu[j], cov=self.sigma[j]
+            )
+        if not np.isfinite(log_B).all():
+            raise ValueError('Gaussian emissions produced non-finite log probabilities.')
+        return log_B
 
     # ------------------------------------------------------------------
     # Forward Algorithm  O(T * N^2)
     # ------------------------------------------------------------------
 
-    def _forward(self, obs: np.ndarray, B: np.ndarray) -> tuple:
-        """
-        Forward algorithm: compute α_t(i) = P(o_1,...,o_t, q_t=i | λ)
+    def _forward_log(self, log_B: np.ndarray) -> tuple[np.ndarray, float]:
+        """Run the forward algorithm in log space and return log-alpha values."""
+        log_A = np.full_like(self.A, -np.inf)
+        positive_transitions = self.A > 0
+        log_A[positive_transitions] = np.log(self.A[positive_transitions])
+        log_pi = np.full_like(self.pi, -np.inf)
+        positive_initial = self.pi > 0
+        log_pi[positive_initial] = np.log(self.pi[positive_initial])
 
-        Recursion:
-            α_1(i) = π_i * B_i(o_1)
-            α_t(j) = [Σ_i α_{t-1}(i) * A_{ij}] * B_j(o_t)
+        log_alpha = np.empty((len(log_B), self.n_states))
+        log_alpha[0] = log_pi + log_B[0]
+        for t in range(1, len(log_B)):
+            log_alpha[t] = log_B[t] + logsumexp(
+                log_alpha[t - 1][:, None] + log_A, axis=0
+            )
 
-        Uses log-scaling to prevent underflow.
-
-        Returns:
-            alpha : shape (T, N)
-            log_likelihood : float
-        """
-        T = obs.shape[0]
-        N = self.n_states
-        alpha = np.zeros((T, N))
-        scale = np.zeros(T)  # scaling factors to prevent underflow
-
-        # Initialization
-        alpha[0] = self.pi * B[0]
-        scale[0] = alpha[0].sum()
-        alpha[0] /= scale[0] + 1e-300
-
-        # Recursion
-        for t in range(1, T):
-            alpha[t] = (alpha[t-1] @ self.A) * B[t]
-            scale[t] = alpha[t].sum()
-            alpha[t] /= scale[t] + 1e-300
-
-        log_likelihood = np.sum(np.log(scale + 1e-300))
-        return alpha, log_likelihood
-
-    # ------------------------------------------------------------------
-    # Backward Algorithm  O(T * N^2)
-    # ------------------------------------------------------------------
-
-    def _backward(self, obs: np.ndarray, B: np.ndarray, scale: np.ndarray) -> np.ndarray:
-        """
-        Backward algorithm: compute β_t(i) = P(o_{t+1},...,o_T | q_t=i, λ)
-
-        Recursion:
-            β_T(i) = 1
-            β_t(i) = Σ_j A_{ij} * B_j(o_{t+1}) * β_{t+1}(j)
-
-        Returns:
-            beta : shape (T, N)
-        """
-        T = obs.shape[0]
-        N = self.n_states
-        beta = np.zeros((T, N))
-        beta[T-1] = 1.0
-
-        for t in range(T-2, -1, -1):
-            beta[t] = (self.A * B[t+1] * beta[t+1]).sum(axis=1)
-            beta[t] /= scale[t+1] + 1e-300
-
-        return beta
+        return log_alpha, float(logsumexp(log_alpha[-1]))
 
     def filter(self, obs: np.ndarray) -> np.ndarray:
         """Return P(state_t | observations through t), without future observations."""
         if obs.ndim != 2 or len(obs) == 0:
             raise ValueError('Filtering requires a non-empty 2D observation sequence.')
-        probabilities, _ = self._forward(obs, self._emission_prob(obs))
-        return probabilities
+        log_alpha, _ = self._forward_log(self._log_emission_prob(obs))
+        return np.exp(log_alpha - logsumexp(log_alpha, axis=1, keepdims=True))
 
     # ------------------------------------------------------------------
     # Viterbi Algorithm  O(T * N^2)
@@ -193,12 +154,10 @@ class GaussianHMM:
         """
         T = obs.shape[0]
         N = self.n_states
-        B = self._emission_prob(obs)
-
         # Use log probabilities to avoid underflow
         log_A = np.where(self.A > 0, np.log(np.maximum(self.A, 1e-300)), -np.inf)
         log_pi = np.where(self.pi > 0, np.log(np.maximum(self.pi, 1e-300)), -np.inf)
-        log_B = np.log(B + 1e-300)
+        log_B = self._log_emission_prob(obs)
 
         delta = np.zeros((T, N))   # max log-prob up to t ending in state j
         psi = np.zeros((T, N), dtype=int)  # backpointers
@@ -241,10 +200,18 @@ class GaussianHMM:
         if not sequences:
             raise ValueError('Cannot fit an HMM without training sequences.')
 
+        sequences = [np.asarray(sequence, dtype=float) for sequence in sequences]
+        if any(sequence.ndim != 2 or len(sequence) == 0 for sequence in sequences):
+            raise ValueError('Training sequences must be non-empty 2D arrays.')
+        n_features = sequences[0].shape[1]
+        if any(sequence.shape[1] != n_features for sequence in sequences):
+            raise ValueError('All training sequences must have the same feature count.')
+        if any(not np.isfinite(sequence).all() for sequence in sequences):
+            raise ValueError('Training sequences must contain only finite observations.')
+
         all_obs = np.vstack(sequences)
         self._initialize_params(all_obs)
 
-        n_features = all_obs.shape[1]
         prev_ll = -np.inf
 
         print(f"Training HMM ({self.n_states} states, {n_features} features)...")
@@ -256,31 +223,40 @@ class GaussianHMM:
             sum_gamma_obs = np.zeros((self.n_states, n_features))
             sum_gamma_obs_outer = np.zeros((self.n_states, n_features, n_features))
             total_ll = 0.0
+            log_A = np.full_like(self.A, -np.inf)
+            positive_transitions = self.A > 0
+            log_A[positive_transitions] = np.log(self.A[positive_transitions])
 
             # ---- E-step ----
             for obs in sequences:
-                T = obs.shape[0]
-                B = self._emission_prob(obs)
-
-                alpha, ll = self._forward(obs, B)
+                log_B = self._log_emission_prob(obs)
+                log_alpha, ll = self._forward_log(log_B)
                 total_ll += ll
 
-                # Recompute scale for backward pass
-                _, scale = self._forward_with_scale(obs, B)
-                beta = self._backward(obs, B, scale)
+                log_beta = np.zeros_like(log_alpha)
+                for t in range(len(obs) - 2, -1, -1):
+                    log_beta[t] = logsumexp(
+                        log_A
+                        + log_B[t + 1][None, :]
+                        + log_beta[t + 1][None, :],
+                        axis=1,
+                    )
 
-                # γ_t(i) = α_t(i) * β_t(i) / Σ_j α_t(j)*β_t(j)
-                gamma = alpha * beta
-                gamma /= gamma.sum(axis=1, keepdims=True) + 1e-300  # shape (T, N)
+                log_gamma = log_alpha + log_beta
+                log_gamma -= logsumexp(log_gamma, axis=1, keepdims=True)
+                gamma = np.exp(log_gamma)
 
-                # ξ_t(i,j) = α_t(i) * A_ij * B_j(o_{t+1}) * β_{t+1}(j)
-                xi = np.zeros((T-1, self.n_states, self.n_states))
-                for t in range(T-1):
-                    xi[t] = (alpha[t][:, None] * self.A * B[t+1] * beta[t+1])
-                    xi[t] /= xi[t].sum() + 1e-300
+                if len(obs) > 1:
+                    log_xi = (
+                        log_alpha[:-1, :, None]
+                        + log_A[None, :, :]
+                        + log_B[1:, None, :]
+                        + log_beta[1:, None, :]
+                    )
+                    log_xi -= logsumexp(log_xi, axis=(1, 2), keepdims=True)
+                    sum_xi += np.exp(log_xi).sum(axis=0)
 
                 # Accumulate
-                sum_xi += xi.sum(axis=0)
                 sum_gamma += gamma.sum(axis=0)
 
                 for j in range(self.n_states):
@@ -301,10 +277,15 @@ class GaussianHMM:
             self.A = updated_A
 
             for j in range(self.n_states):
-                self.mu[j] = sum_gamma_obs[j] / (sum_gamma[j] + 1e-300)
-                second_moment = sum_gamma_obs_outer[j] / (sum_gamma[j] + 1e-300)
-                self.sigma[j] = second_moment - np.outer(self.mu[j], self.mu[j])
-                self.sigma[j] += np.eye(n_features) * 1e-3  # Regularize
+                if sum_gamma[j] <= 1e-12:
+                    continue
+                self.mu[j] = sum_gamma_obs[j] / sum_gamma[j]
+                second_moment = sum_gamma_obs_outer[j] / sum_gamma[j]
+                covariance = second_moment - np.outer(self.mu[j], self.mu[j])
+                self.sigma[j] = self._regularize_covariance(covariance)
+
+            if not np.isfinite(total_ll):
+                raise ValueError('HMM training produced a non-finite log-likelihood.')
 
             # Convergence check
             delta_ll = total_ll - prev_ll
@@ -319,24 +300,6 @@ class GaussianHMM:
         print("Training complete.")
         print(f"\nLearned Transition Matrix A:\n{np.round(self.A, 3)}")
         print(f"\nLearned Initial Distribution pi: {np.round(self.pi, 3)}")
-
-    def _forward_with_scale(self, obs: np.ndarray, B: np.ndarray) -> tuple:
-        """Forward pass returning scale factors (needed for backward pass)."""
-        T = obs.shape[0]
-        N = self.n_states
-        alpha = np.zeros((T, N))
-        scale = np.zeros(T)
-
-        alpha[0] = self.pi * B[0]
-        scale[0] = alpha[0].sum()
-        alpha[0] /= scale[0] + 1e-300
-
-        for t in range(1, T):
-            alpha[t] = (alpha[t-1] @ self.A) * B[t]
-            scale[t] = alpha[t].sum()
-            alpha[t] /= scale[t] + 1e-300
-
-        return alpha, scale
 
     def decode(self, obs: np.ndarray) -> list:
         """

@@ -7,26 +7,19 @@ from src.pipeline import run_evaluate, run_preprocess, run_train, run_tune
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='F1 Pit-Stop HMM Pipeline')
-    parser.add_argument('--preprocess', action='store_true', help='Fetch laps and build features')
+    parser.add_argument('--preprocess', action='store_true', help='Build features from Kaggle CSVs')
     parser.add_argument(
         '--tune',
         action='store_true',
-        help='Tune thresholds and HMM states on 2023 only (fit candidates on 2020-2022)',
+        help='Tune thresholds and HMM states on 2019 only (fit candidates on 2011-2018)',
     )
     parser.add_argument('--train', action='store_true', help='Train on seasons before --test_year')
     parser.add_argument('--evaluate', action='store_true', help='Evaluate the held-out season')
-    parser.add_argument('--year', type=int, help='Single season for preprocessing')
-    parser.add_argument(
-        '--years',
-        nargs='+',
-        type=int,
-        help='Complete seasons to preprocess (e.g. --years 2020 2021 2022 2023)',
-    )
-    parser.add_argument('--gp', nargs='+', help='Grand Prix names for preprocessing')
     parser.add_argument(
         '--test_year',
         type=int,
-        help='Held-out season (defaults to latest season in the processed CSV)',
+        default=2020,
+        help='Held-out season (default: 2020)',
     )
     parser.add_argument(
         '--compounds',
@@ -40,7 +33,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         choices=[2, 3, 4],
         default=3,
-        help='HMM state count for non-final training (final training uses 2023 tuning)',
+        help='HMM state count for non-final training (final training uses 2019 tuning)',
     )
     parser.add_argument('--tolerance', type=int, default=2, help='Pit matching tolerance in laps')
     parser.add_argument('--drivers', nargs='+', help='Driver codes to evaluate')
@@ -53,7 +46,7 @@ def main() -> None:
     if not (args.preprocess or args.tune or args.train or args.evaluate):
         raise SystemExit('Choose --preprocess, --tune, --train, or --evaluate.')
     if args.preprocess:
-        run_preprocess(year=args.year, gp=args.gp, years=args.years)
+        run_preprocess()
     if args.tune:
         run_tune(n_iter=args.n_iter, compounds=args.compounds)
     if args.train:

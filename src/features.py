@@ -7,7 +7,6 @@ from sklearn.preprocessing import StandardScaler
 
 FEATURE_COLUMNS = [
     'lap_time_delta',
-    'sector3_delta',
     'rolling_degradation',
     'tyre_age_norm',
 ]
@@ -23,7 +22,15 @@ def _is_clean_lap(df: pd.DataFrame) -> pd.Series:
     green = df['TrackStatus'].astype('string').eq('1').fillna(False)
     no_pit_activity = df['PitInTime'].isna() & df['PitOutTime'].isna()
     valid_lap_time = df['LapTime'].notna() & (df['LapTime'] > 0)
-    return accurate & green & no_pit_activity & valid_lap_time & df['Stint'].notna()
+    first_lap = df['LapNumber'].ne(1) if 'RaceId' in df.columns else True
+    return (
+        accurate
+        & green
+        & no_pit_activity
+        & valid_lap_time
+        & df['Stint'].notna()
+        & first_lap
+    )
 
 
 def _actual_pits_by_stint(df: pd.DataFrame, eligible: pd.Series) -> pd.DataFrame:
@@ -70,7 +77,7 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
     )
     missing = sorted(required.difference(df.columns))
     if missing:
-        raise ValueError(f'Lap data is missing required FastF1 columns: {missing}')
+        raise ValueError(f'Lap data is missing required columns: {missing}')
 
     raw = df.copy().reset_index(drop=True)
     raw['LapNumber'] = pd.to_numeric(raw['LapNumber'], errors='coerce')
@@ -83,20 +90,24 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
         .idxmin()
     )
     first_clean_laps = raw.loc[first_clean_lap_indices]
-    later_stint_outlap_indices = first_clean_laps.index[
-        first_clean_laps['Stint'].gt(first_stint.loc[first_clean_laps.index])
-    ]
     is_stint_out_lap = pd.Series(False, index=raw.index)
-    is_stint_out_lap.loc[later_stint_outlap_indices] = True
+    if 'RaceId' not in raw.columns:
+        later_stint_outlap_indices = first_clean_laps.index[
+            first_clean_laps['Stint'].gt(first_stint.loc[first_clean_laps.index])
+        ]
+        is_stint_out_lap.loc[later_stint_outlap_indices] = True
 
-    ordered = raw.sort_values(RACE_COLUMNS + ['LapNumber'], kind='stable')
-    historical_lap_times = ordered['LapTime'].where(clean_laps.loc[ordered.index])
-    prior_lap_median = (
-        ordered.assign(_historical_lap_time=historical_lap_times)
-        .groupby(RACE_COLUMNS, sort=False)['_historical_lap_time']
-        .transform(lambda times: times.shift().expanding(min_periods=1).median())
-        .reindex(raw.index)
-    )
+    if 'RaceId' in raw.columns:
+        prior_lap_median = raw.groupby(RACE_COLUMNS, sort=False)['LapTime'].transform('median')
+    else:
+        ordered = raw.sort_values(RACE_COLUMNS + ['LapNumber'], kind='stable')
+        historical_lap_times = ordered['LapTime'].where(clean_laps.loc[ordered.index])
+        prior_lap_median = (
+            ordered.assign(_historical_lap_time=historical_lap_times)
+            .groupby(RACE_COLUMNS, sort=False)['_historical_lap_time']
+            .transform(lambda times: times.shift().expanding(min_periods=1).median())
+            .reindex(raw.index)
+        )
     plausible_lap_time = (
         prior_lap_median.isna()
         | raw['LapTime'].le(prior_lap_median * MAX_LAP_TIME_RATIO)
@@ -107,6 +118,7 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
         'HARD': 50,
         'INTERMEDIATE': 30,
         'WET': 30,
+        'UNKNOWN': 40,
     }
     compound = raw['Compound'].astype('string').str.strip().str.upper()
     tyre_life = pd.to_numeric(raw['TyreLife'], errors='coerce')
@@ -129,14 +141,6 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
     )
     observations['lap_time_delta'] = observations['LapTime'] - best_times_so_far
 
-    if 'Sector3Time' in observations.columns:
-        best_sector3_so_far = observations.groupby(
-            STINT_COLUMNS, sort=False
-        )['Sector3Time'].transform(lambda times: times.cummin())
-        observations['sector3_delta'] = observations['Sector3Time'] - best_sector3_so_far
-    else:
-        observations['sector3_delta'] = 0.0
-
     observations['rolling_degradation'] = (
         observations.groupby(STINT_COLUMNS, sort=False)['lap_time_delta']
         .transform(lambda values: values.rolling(window=3, min_periods=1).mean())
@@ -156,7 +160,7 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_stint_records(df: pd.DataFrame, min_laps: int = 3) -> list[dict]:
-    """Return observations and original LapNumbers grouped by race, driver, and FastF1 stint."""
+    """Return observations and original LapNumbers grouped by race, driver, and stint."""
     records = []
     for key, stint in df.groupby(STINT_COLUMNS, sort=False, dropna=False):
         stint = stint.sort_values('LapNumber')
