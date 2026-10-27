@@ -146,10 +146,22 @@ def build_observation_matrix(df: pd.DataFrame) -> pd.DataFrame:
         .transform(lambda values: values.rolling(window=3, min_periods=1).mean())
     )
 
-    max_life = compound.loc[observations.index].map(compound_max_laps).fillna(35)
-    observations['tyre_age_norm'] = (
-        tyre_life.loc[observations.index] / max_life
-    ).clip(0, 1)
+    tyre_age_group_columns = (
+        ['RaceId', 'DriverId', 'Stint']
+        if {'RaceId', 'DriverId'}.issubset(observations.columns)
+        else STINT_COLUMNS
+    )
+    observations['TyreLife'] = (
+        observations.groupby(tyre_age_group_columns, sort=False).cumcount() + 1
+    )
+    typical_life = {'SOFT': 25, 'MEDIUM': 35, 'HARD': 50, 'UNKNOWN': 40}
+    observations['tyre_age_norm'] = observations.apply(
+        lambda r: r['TyreLife'] / typical_life.get(str(r['Compound']).upper(), 40),
+        axis=1,
+    )
+    assert observations['TyreLife'].corr(observations['tyre_age_norm']) > 0.95, (
+        "tyre_age_norm looks scrambled"
+    )
 
     observations[FEATURE_COLUMNS] = observations[FEATURE_COLUMNS].replace(
         [np.inf, -np.inf], np.nan
