@@ -1,0 +1,10 @@
+{
+  "placeholder": true,
+  "note": "PLACEHOLDER: lap times and pit laps are real Ergast data; all model outputs and metrics are fake, made by docs/tools/make_placeholder_data.py",
+  "files": [
+    "evaluation_pooled_summary.csv",
+    "prediction_timing_deltas.csv",
+    "race-explorer-2020.json",
+    "validation-threshold-metrics-2019.json"
+  ]
+}
