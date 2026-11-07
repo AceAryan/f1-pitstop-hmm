@@ -567,25 +567,10 @@
     update();
   }
 
-  /* ---------- theme switch (Telemetry / Retro) ---------- */
-  function initTheme(redraw) {
-    const btn = $('theme-toggle');
-    const root = document.documentElement;
-    const label = () => btn.setAttribute('aria-label', `Design: ${root.dataset.theme}. Click to switch.`);
-    label();
-    btn.addEventListener('click', () => {
-      root.dataset.theme = root.dataset.theme === 'retro' ? 'telemetry' : 'retro';
-      try { localStorage.setItem('f1hmm-theme', root.dataset.theme); } catch (e) { /* storage may be blocked */ }
-      label();
-      requestAnimationFrame(() => redraw.forEach((f) => f()));
-    });
-  }
-
   /* ---------- boot ---------- */
   async function main() {
     initNav();
     const redraw = [];
-    initTheme(redraw);
     if (location.protocol === 'file:') {
       showError('<strong>Open this page through a web server.</strong> Browsers block data files when a page is opened from disk. Run <code>python -m http.server -d docs 8000</code> and visit <code>http://localhost:8000</code>.');
     }

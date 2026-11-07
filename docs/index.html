@@ -1,20 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="telemetry">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Predicting F1 Pit Stops with HMMs</title>
   <meta name="description" content="ES 335 project: can a hidden Markov model of tyre wear, using only lap times seen so far, predict when a Formula 1 driver will pit?">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23ff1e3c' stroke-width='6'/%3E%3C/svg%3E">
-  <script>
-    /* Apply the saved theme before the page paints (no flash). */
-    try { var t = localStorage.getItem('f1hmm-theme'); if (t === 'retro' || t === 'telemetry') document.documentElement.dataset.theme = t; } catch (e) {}
-    if (!document.documentElement.dataset.theme) document.documentElement.dataset.theme = 'telemetry';
-  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,400;0,600;0,700;0,900;1,700;1,900&family=JetBrains+Mono:wght@400;600;700&family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap">
-  <link rel="stylesheet" href="assets/style.css?v=3">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,400;0,600;0,700;0,900;1,700;1,900&family=JetBrains+Mono:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="assets/style.css?v=5">
 </head>
 <body>
 
@@ -65,9 +60,6 @@
       <li><a href="#reproduce">Reproduce</a></li>
       <li><a href="#team">Team &amp; AI use</a></li>
     </ul>
-    <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Switch design">
-      <span class="tt-a">Telemetry</span><span class="tt-b">Retro</span>
-    </button>
   </div>
 </nav>
 
@@ -434,9 +426,9 @@ python -m http.server -d docs 8000      # preview at http://localhost:8000</code
 </main>
 
 <footer>
-  <div class="wrap">ES 335 Machine Learning, IIT Gandhinagar, 2026 · <a href="https://github.com/AceAryan/f1-pitstop-hmm">github.com/AceAryan/f1-pitstop-hmm</a></div>
+  <div class="wrap">ES 335 Machine Learning, IIT Gandhinagar, 2026 · <a href="https://github.com/AceAryan/f1-pitstop-hmm">GitHub</a></div>
 </footer>
 
-<script src="assets/app.js?v=3"></script>
+<script src="assets/app.js?v=4"></script>
 </body>
 </html>
