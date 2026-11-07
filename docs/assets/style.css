@@ -63,6 +63,7 @@ h3 { font-size: 1.15rem; margin: 1.5em 0 0.5em; }
 p { margin: 0 0 0.9em; }
 /* Justified body text; hyphenation avoids big gaps on narrow phone screens */
 p, li { text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+@media (max-width: 640px) { p, li { text-align: left; } }
 nav.toc li, .legend, .stat-label, .events, td, th { text-align: left; hyphens: manual; }
 ul, ol { padding-left: 1.3em; margin: 0 0 0.9em; }
 li { margin-bottom: 0.3em; }
@@ -95,7 +96,7 @@ header.hero { position: relative; padding: 0 0 30px; overflow: hidden; }
     radial-gradient(600px 300px at 0% 100%, rgba(0,229,255,0.08), transparent 60%);
   border-bottom: 1px solid var(--border);
 }
-.hero .kicker {
+.hero .kicker { text-align: left;
   display: inline-flex; align-items: center; gap: 8px; margin: 28px 0 14px;
   text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.75rem; color: var(--muted); font-family: var(--font-num);
 }
@@ -166,7 +167,7 @@ main section:last-child { border-bottom: 0; }
 .notice[hidden] { display: none; }
 .draft { border-left: 5px solid var(--draft-line); background: var(--draft-bg); color: var(--draft-text); padding: 10px 14px; border-radius: 6px; margin: 14px 0; font-size: 0.95rem; }
 .draft::before { content: "DRAFT — fill in after the final run"; display: block; font-family: var(--font-num); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 4px; }
-.draft.todo::before { content: "DRAFT — team to fill in"; }
+.draft.todo::before { content: "TO DO — authors to write"; }
 .callout { border-left: 5px solid var(--accent); background: var(--surface); padding: 14px 16px; border-radius: var(--radius); margin: 14px 0; }
 .callout.info { border-left-color: var(--accent-2); }
 [data-theme="telemetry"] #question > .callout { font-size: 1.15rem; background: linear-gradient(90deg, rgba(255,30,60,0.12), transparent 70%); }
@@ -179,6 +180,8 @@ th { font-weight: 700; background: var(--surface-2); font-size: 0.82rem; }
 [data-theme="telemetry"] th { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; color: var(--muted); }
 tr:last-child td { border-bottom: 0; }
 td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.wrap-text th, .wrap-text td { white-space: normal; }
+.wrap-text td.num, .wrap-text th.num { white-space: nowrap; }
 tr.best td { font-weight: 700; }
 [data-theme="telemetry"] tr.best td { background: rgba(255,30,60,0.08); }
 
