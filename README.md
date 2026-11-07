@@ -1,141 +1,173 @@
 # F1 Pit-Stop HMM
 
-Infer tyre-degradation states from Formula 1 lap data and compare pit-stop
-predictions against two baselines: a tyre-age threshold and logistic regression.
+Can lap times alone tell us when a Formula 1 driver is about to pit?
 
-## Pipeline
+We treat tyre wear as a hidden state, infer it from lap times with a hidden
+Markov model (HMM) written from scratch, and compare its pit-stop alarms with
+two simple baselines.
 
-The single entry point is `main.py`; processed observations use CSV for the
-existing training/evaluation pipeline and pickle files for the season splits.
+**Project website:** https://acearyan.github.io/f1-pitstop-hmm/
+(full write-up, interactive results and a race explorer)
 
-```text
-python main.py --preprocess
-python main.py --tune                           # fit on 2011-2018; select using 2019 only
-python main.py --train --test_year 2020         # refit on 2011-2019 using selected settings
-python main.py --evaluate --test_year 2020      # one-time final test
-```
+ES 335 Machine Learning, IIT Gandhinagar, 2026.
 
-The final experiment is chronological: candidate models are fit on 2011–2018,
-all threshold and state-count selection uses 2019, and final models are refit
-on 2011–2019 before the 2020 test is evaluated once. `--tune` selects the
-terminal-state posterior threshold (0.3–0.9), tyre-age threshold (0.60–0.95),
-and state count (2, 3, or 4) by pooled 2019 F1 at +/-2 laps. It also tunes the
-no-tyre-age HMM ablation on the same validation season. Fitted scalers and
-models use training seasons only. The 2020 final evaluation is guarded against
-repeat runs; it requires final models trained with the saved 2019 configuration.
-Preprocessing writes `data/processed/train.pkl`, `val.pkl`, and `test.pkl`, as
-well as the combined CSV used by training and evaluation. It also preserves
-complete dry-race lap records in `data/race_laps.csv` for the race explorer.
+## Result in one line
 
-Ergast observations are grouped by **Year, Grand Prix, Driver, and inferred
-stint**. The pipeline retains real lap numbers and pit targets, excludes
-pit-in/out laps and the first race lap, and removes lap times over 1.35 times
-the driver's median in that race. Entire races with known intermediate or wet
-compounds are excluded. When compound data is unavailable, compound is marked
-`UNKNOWN` and tyre age is inferred from stint lap counts. Lap-time delta and
-rolling degradation use only lap times from the current stint. Ergast has no
-sector times, so the feature vector contains three features. Regenerate
-processed data with `--preprocess` after changing the source CSVs.
+No model predicts the pit lap well. On the 2020 test season, at a ±2 lap window:
 
-## Hidden states and prediction
-
-| State | Meaning |
+| Model | F1 |
 |---|---|
-| 0 | FRESH |
-| 1 through N-2 | DEGRADING (no intermediate state for a 2-state model) |
-| N-1 | CRITICAL |
+| Tyre-age rule | 0.107 |
+| HMM | 0.106 |
+| HMM without tyre age | 0.101 |
+| Logistic regression | 0.085 |
 
-The HMM starts in state 0, uses left-to-right state transitions, and initializes
-state emissions in increasing order of its final observation feature (tyre age
-for the full model; rolling degradation for the ablation). Evaluation uses
-forward-filtered probabilities (`P(state_t | laps through t)`), not Viterbi
-decoding, so a prediction never uses future laps from the same stint.
+The HMM does not beat simply counting laps. See the website for why.
 
-## Baselines and output
+## Quick start
 
-- **Tyre-age rule:** predict once per stint at the threshold selected on 2019.
-- **Logistic regression:** predict within a three-lap horizon, trained using
-  training-season pit targets.
-- **HMM:** predict when forward-filtered probability of the final state crosses
-  its 2019-selected alarm threshold.
-- **HMM ablation:** the same state model without normalized tyre age as an
-  observation, to measure whether lap-degradation signals add value beyond
-  tyre-age counting.
-
-Pits are matched one-to-one within each driver-race at the selected lap
-tolerance. Precision, recall, and F1 are pooled across driver-races, with
-sensitivity results at +/-1, +/-2, and +/-3 laps. Matched predicted-minus-actual
-lap differences and unmatched prediction/pit records are saved for timing-bias
-analysis. Per-driver-race metrics are retained as supplementary detail.
-Results are written to `results/evaluation_summary.csv`,
-`results/evaluation_pooled_summary.csv`, and
-`results/prediction_timing_deltas.csv`. Validation grid scores are saved to
-`results/validation_tuning.csv`. `--tune` also exports
-`results/site-data/validation-threshold-metrics-2019.json`, containing the
-Python-computed pooled metric curve for each tuned threshold. A successful
-`--evaluate --test_year 2020` exports
-`results/site-data/race-explorer-2020.json`, with race/driver timelines,
-per-lap forward-filtered state probabilities, available lap times,
-HMM and baseline alarm flags, model-observation markers, and actual pit laps.
-On laps excluded from model observations, probabilities carry forward from the
-latest observation in that stint; the model-observation marker distinguishes
-new updates from carried values. These JSON files are intended as static
-GitHub Pages inputs; no website runtime computation is required. Models and
-scalers are under `results/models/`; plots are under `results/plots/`.
-
-## Project structure
-
-```text
-f1-pitstop-hmm/
-├── main.py                  # Single CLI entry point
-├── data/
-│   ├── kaggle_loader.py     # Kaggle Ergast CSV loader
-│   ├── kaggle/              # Downloaded source CSVs (gitignored)
-│   └── processed/           # Train/validation/test pickle splits
-├── src/
-│   ├── features.py          # Filtering, feature engineering, stint grouping
-│   ├── hmm.py               # Gaussian HMM, Baum-Welch, forward filtering
-│   └── pipeline.py          # Season split, training, baselines, evaluation
-├── tests/
-│   └── test_pipeline.py     # Regression tests for grouping, filtering, and HMM
-├── results/
-│   ├── models/              # Trained models and scalers (gitignored)
-│   └── plots/               # Evaluation and transition plots
-└── requirements.txt
-```
-
-## Setup
+The Kaggle CSVs are already in the repo, so you can run everything straight
+after cloning.
 
 ```bash
 git clone https://github.com/AceAryan/f1-pitstop-hmm.git
 cd f1-pitstop-hmm
 pip install -r requirements.txt
-python main.py --help
+
+python main.py --preprocess                   # clean laps, build features, split by season
+python main.py --tune                         # fit on 2011-2018, choose settings on 2019
+python main.py --train --test_year 2020       # refit on 2011-2019 with the 2019 settings
+python main.py --evaluate --test_year 2020    # one-time final test on 2020
 ```
 
-Download the [Kaggle Formula 1 World Championship dataset](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020),
-unzip the CSV files into `data/kaggle/`, then run:
+The 2020 test can only run once. The pipeline refuses to repeat it.
+
+## Data
+
+- Source: [Kaggle Formula 1 World Championship dataset](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020)
+  (Ergast data, CC0 Public Domain).
+- Files used: `lap_times.csv`, `pit_stops.csv`, `races.csv`, `results.csv`
+  in `data/kaggle/`.
+- Optional: `tyres.csv` adds compound and tyre-life data. Without it, the
+  compound is `UNKNOWN` and tyre age is counted from the stint.
+- Seasons: 2011-2020.
+
+| Seasons | Role |
+|---|---|
+| 2011-2018 | Training |
+| 2019 | Validation (all tuning happens here) |
+| 2020 | Final test, run once |
+
+## How it works
+
+### Cleaning
+
+- Drop the first lap of each race.
+- Drop pit-in and pit-out laps.
+- Drop laps slower than 1.35x the driver's median lap in that race.
+- Drop whole races that used intermediate or wet tyres.
+- Infer stints from pit-stop laps. Laps are grouped by year, Grand Prix,
+  driver and stint.
+
+### Features (three per lap)
+
+Each feature uses only the current stint, up to the current lap.
+
+1. Lap-time delta: lap time minus the best lap so far in the stint.
+2. Rolling degradation: 3-lap rolling mean of the delta.
+3. Tyre age: laps so far in the stint, scaled by a typical tyre life.
+
+Ergast has no sector times, so there are no sector features.
+
+### Models
+
+| Model | Raises an alarm when |
+|---|---|
+| HMM | P(final state), from forward filtering, crosses a threshold. Once per stint. |
+| HMM without tyre age | Same, but tyre age is removed from the inputs (ablation). |
+| Tyre-age rule | Tyre age crosses a threshold. Once per stint. |
+| Logistic regression | It predicts a pit within the next 3 laps. Can fire more than once per stint. |
+
+HMM details:
+
+- Gaussian emissions, left-to-right transitions, always starts in the first state.
+- Uses forward filtering, `P(state_t | laps up to t)`, not Viterbi, so it
+  never looks at future laps.
+- Number of states (2, 3 or 4) is chosen on 2019. The final model uses
+  **2 states** (fresh, worn).
+
+### What is tuned on 2019
+
+- HMM state count: 2, 3 or 4.
+- HMM alarm threshold: 0.3 to 0.9.
+- Tyre-age threshold: 0.60 to 0.95.
+- Each picked by pooled F1 at ±2 laps. The ablation is tuned the same way.
+
+### Evaluation
+
+- Alarms are matched one-to-one to real pit stops within each driver-race.
+- A match within ±2 laps is a hit. Results are also reported at ±1 and ±3.
+- Precision, recall and F1 are pooled over all driver-races.
+- Alarm timing (alarm lap minus pit lap) is saved to check for early or late alarms.
+
+## Outputs
+
+All outputs go to `results/`, which is not committed.
+
+| File | Contents |
+|---|---|
+| `evaluation_pooled_summary.csv` | Main results, pooled, at ±1, ±2, ±3 |
+| `evaluation_summary.csv` | Per driver-race results |
+| `prediction_timing_deltas.csv` | Alarm lap minus pit lap, plus unmatched alarms and pits |
+| `validation_tuning.csv` | Every 2019 tuning score |
+| `site-data/validation-threshold-metrics-2019.json` | 2019 threshold curves, for the website |
+| `site-data/race-explorer-2020.json` | Lap-by-lap 2020 data, for the website |
+| `models/` | Trained models and scalers |
+| `plots/` | State plots |
+
+To update the website with new results:
 
 ```bash
-python main.py --preprocess
+bash docs/tools/update_site_data.sh
 ```
 
-The required files are `lap_times.csv`, `pit_stops.csv`, `races.csv`, and
-`results.csv`. If available, `tyres.csv` provides compound and tyre-life
-metadata; otherwise compounds are marked `UNKNOWN` and tyre age is inferred.
-
-## CLI options
+## Command-line options
 
 | Option | Description |
 |---|---|
-| `--preprocess` | Process Kaggle CSVs into train/validation/test splits |
-| `--tune` | Tune thresholds and state count on 2019; fit candidates on 2011–2018 |
-| `--train` | Train before `--test_year`; for 2020, refit with selected 2019 settings |
-| `--evaluate` | Evaluate the held-out `--test_year`; the 2020 final test runs once |
+| `--preprocess` | Build train / validation / test splits from the Kaggle CSVs |
+| `--tune` | Fit on 2011-2018 and tune on 2019 |
+| `--train` | Train on seasons before `--test_year`. For 2020, uses the 2019 settings |
+| `--evaluate` | Evaluate `--test_year`. The 2020 test runs only once |
 | `--test_year` | Held-out season (default: 2020) |
-| `--compounds` | HMM compounds (default: `SOFT MEDIUM HARD`) |
+| `--compounds` | Compounds to train on (default: `SOFT MEDIUM HARD`) |
 | `--n_iter` | Baum-Welch iterations (default: 50) |
-| `--n_states` | States for non-final training (2, 3, or 4) |
+| `--n_states` | States for non-final training: 2, 3 or 4 (default: 3) |
 | `--tolerance` | Pit matching window in laps (default: 2) |
 | `--drivers` | Driver codes to evaluate |
-| `--plot_drivers` | Driver codes for state plots |
+| `--plot_drivers` | Driver codes to plot |
+
+## Project structure
+
+```text
+f1-pitstop-hmm/
+├── main.py                  # Command-line entry point
+├── data/
+│   ├── kaggle_loader.py     # Loads the Kaggle CSVs
+│   ├── kaggle/              # Kaggle CSVs (committed)
+│   └── processed/           # Train / validation / test splits
+├── src/
+│   ├── data_loader.py       # Older FastF1 loader
+│   ├── features.py          # Cleaning, features, stints
+│   ├── hmm.py               # Gaussian HMM, Baum-Welch, forward filtering
+│   └── pipeline.py          # Split, training, baselines, evaluation
+├── tests/
+│   └── test_pipeline.py     # Unit tests
+├── docs/                    # Project website (GitHub Pages)
+└── requirements.txt
+```
+
+## Team
+
+- **Aryan Kumar** (24110055): models and pipeline.
+- **D A S K R Manognya** (24110097): website and presentation.
