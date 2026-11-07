@@ -63,6 +63,7 @@ h3 { font-size: 1.15rem; margin: 1.5em 0 0.5em; }
 p { margin: 0 0 0.9em; }
 /* Justified body text; hyphenation avoids big gaps on narrow phone screens */
 p, li { text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+@media (max-width: 640px) { p, li { text-align: left; } }
 nav.toc li, .legend, .stat-label, .events, td, th { text-align: left; hyphens: manual; }
 ul, ol { padding-left: 1.3em; margin: 0 0 0.9em; }
 li { margin-bottom: 0.3em; }
@@ -95,7 +96,7 @@ header.hero { position: relative; padding: 0 0 30px; overflow: hidden; }
     radial-gradient(600px 300px at 0% 100%, rgba(0,229,255,0.08), transparent 60%);
   border-bottom: 1px solid var(--border);
 }
-.hero .kicker {
+.hero .kicker { text-align: left;
   display: inline-flex; align-items: center; gap: 8px; margin: 28px 0 14px;
   text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.75rem; color: var(--muted); font-family: var(--font-num);
 }
