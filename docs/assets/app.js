@@ -603,6 +603,8 @@
         getJSON('drivers.json', true).then((d) => d || {}),
       ]);
       if (explorer.placeholder) markPlaceholder();
+      // Pipeline writes driver ids as numbers; the <select> works with strings.
+      explorer.races.forEach((r) => r.drivers.forEach((d) => { d.driver = String(d.driver); }));
       redraw.push(initExplorer(explorer, drivers, val));
       if (pooled) finalStintTable(explorer, pooled);
     });
