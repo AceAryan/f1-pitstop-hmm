@@ -110,7 +110,7 @@
     <strong>Why not FastF1?</strong> Our original plan used the FastF1 library, which has compounds and track status. On 15 October 2026, F1 moved its live-timing archive behind a paid F1 TV subscription, so we switched to Ergast/Kaggle and lost those columns.
   </div>
   <p><strong>Seasons and licence.</strong> The Kaggle CSVs cover 1950–2024. We use 2011–2020 only; 2021–2024 were never loaded by the pipeline, so they remain an untouched second test set for future work. The dataset is released under <strong>CC0: Public Domain</strong>, which is why the four CSVs can be committed to this public repository.</p>
-  <div class="draft todo">One sentence on why the study stops at 2020 (e.g. the window fixed in the proposal).</div>
+  <p>The 2011–2020 window and the train / validation / test split were fixed in our proposal, before any model was run. We kept them when we moved from FastF1 to Kaggle so that the 2020 test season stayed untouched.</p>
 </section>
 
 <!-- 3. PREPROCESSING -->
@@ -399,6 +399,7 @@
     <li><strong>Cleaning median uses the whole race</strong> (see Preprocessing).</li>
     <li><strong>Timing pairs are not limited to the same stint</strong> (see the caveat under Errors).</li>
     <li><strong>Two proposal checks not done:</strong> no Gaussian mixture model comparison and no check of our HMM against <code>hmmlearn</code>.</li>
+    <li><strong>Unit tests are out of date.</strong> <code>tests/test_pipeline.py</code> imports a helper that was later removed from the pipeline, so the test file does not currently run.</li>
     <li><strong>Tyre-age threshold at the edge of the grid.</strong> 2019 picked 0.60, the lowest value tried, so a lower threshold might have done better.</li>
   </ul>
 </section>
@@ -435,16 +436,28 @@ python -m http.server -d docs 8000      # preview at http://localhost:8000</code
 <section id="team">
   <h2><span class="num">12</span>Team, AI use and references</h2>
   <div class="grid two">
-    <div class="card"><h3>D A S K R Manognya</h3><p class="muted small">24110097</p><div class="draft todo">Main contributions.</div></div>
-    <div class="card"><h3>Aryan Kumar</h3><p class="muted small">24110055</p><div class="draft todo">Main contributions.</div></div>
+    <div class="card"><h3>D A S K R Manognya</h3><p class="muted small">24110097</p><p class="small"><strong>Website and presentation.</strong></p><ul class="small">
+      <li>Designed and built this site (HTML, CSS, JavaScript, no libraries) and set it up on GitHub Pages.</li>
+      <li>Interactive parts: the 2019 threshold explorer, results table and chart, race explorer and timing chart.</li>
+      <li>Placeholder-data and data-copy scripts that turn the pipeline outputs into site data.</li>
+      <li>Wrote the report text: question, data, method and evaluation sections, limitations.</li>
+    </ul></div>
+    <div class="card"><h3>Aryan Kumar</h3><p class="muted small">24110055</p><p class="small"><strong>Models and pipeline.</strong></p><ul class="small">
+      <li>Data loading (FastF1, then Kaggle/Ergast), lap cleaning, stint inference and the per-lap features.</li>
+      <li>Gaussian HMM from scratch (forward–backward, Viterbi, Baum–Welch, forward filtering) and the three baselines.</li>
+      <li>Season split, 2019 tuning, one-time 2020 test, pooled matching metrics and the JSON exports for the site.</li>
+      <li>Found and fixed the tyre-age index bug, then re-ran the full pipeline.</li>
+    </ul></div>
   </div>
+  <p class="small">The work was split equally. Both of us wrote the proposal, chose the question and baselines, read the final results together and can explain any part of the project.</p>
 
   <h3>AI-use disclosure</h3>
   <ul>
     <li><strong>Website:</strong> the HTML, CSS and JavaScript of this site, the placeholder-data script and the data-copy script were drafted with Claude (Anthropic) from our project notes, then reviewed and edited by us. The ML pipeline was not changed in that step.</li>
     <li><strong>Report text from the final results:</strong> the Results, Race explorer, Errors and Conclusion text, the 2-state diagram and the counts in the errors table were drafted with Claude Code (Anthropic) from the files in <code>results/</code>, with every number recomputed from those files. The ML pipeline was not changed.</li>
+    <li><strong>Pipeline code:</strong> an AI coding agent was used while writing and debugging the pipeline (the "Agent host session" commits in the git history, 4–28 October 2026): feature building, evaluation, the season split, the Kaggle loader and the tyre-age fix. We checked its output by reading the diffs and re-running the pipeline end to end.</li>
   </ul>
-  <div class="draft todo">List every other use of AI tools (which tool, for what: code, debugging, writing, the tyre-age bug hunt, etc.) and how outputs were checked. Each of us can explain any part of the project in the viva.</div>
+  <p class="small">Every result on this page comes from the pipeline output files, not from hand-typed or AI-generated numbers. Each of us can explain any part of the project in the viva.</p>
 
   <h3>References</h3>
   <ul class="small">
@@ -453,8 +466,11 @@ python -m http.server -d docs 8000      # preview at http://localhost:8000</code
     <li>Rabiner, L. R. (1989). A tutorial on hidden Markov models and selected applications in speech recognition. <em>Proceedings of the IEEE</em>, 77(2), 257–286.</li>
     <li>Pedregosa, F. et al. (2011). Scikit-learn: Machine learning in Python. <em>JMLR</em>, 12, 2825–2830.</li>
     <li>Virtanen, P. et al. (2020). SciPy 1.0. <em>Nature Methods</em>, 17, 261–272 (used for one-to-one alarm matching).</li>
+    <li>Harris, C. R. et al. (2020). Array programming with NumPy. <em>Nature</em>, 585, 357–362.</li>
+    <li>McKinney, W. (2010). Data structures for statistical computing in Python. <em>Proc. 9th Python in Science Conference</em>, 56–61 (pandas).</li>
+    <li>Hunter, J. D. (2007). Matplotlib: A 2D graphics environment. <em>Computing in Science &amp; Engineering</em>, 9(3), 90–95.</li>
+    <li>FastF1 (Python package, used in our first data pipeline). <a href="https://github.com/theOehrly/Fast-F1">github.com/theOehrly/Fast-F1</a></li>
   </ul>
-  <div class="draft todo">Add any other papers, blog posts or code you used.</div>
 </section>
 
 </main>
