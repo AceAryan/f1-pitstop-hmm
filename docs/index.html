@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,400;0,600;0,700;0,900;1,700;1,900&family=JetBrains+Mono:wght@400;600;700&display=swap">
-  <link rel="stylesheet" href="assets/style.css?v=8">
+  <link rel="stylesheet" href="assets/style.css?v=9">
 </head>
 <body>
 
@@ -17,23 +17,42 @@
   <div class="hero-stripe" aria-hidden="true"></div>
   <div class="wrap">
     <p class="kicker"><span class="live-dot" aria-hidden="true"></span>ES 335 Machine Learning · IIT Gandhinagar · 2026</p>
-    <h1>Predicting <span class="hl">F1 pit stops</span> from lap times with a hidden Markov model</h1>
-    <p class="lead">Tyre wear is never published. We treat it as a hidden state (fresh → worn), infer it from how lap times change, and ask whether that tells us when a driver is about to pit.</p>
-    <svg class="hero-trace" viewBox="0 0 600 70" preserveAspectRatio="none" aria-hidden="true">
-      <polyline class="trace-a" points="0,52 30,48 60,47 90,44 120,42 150,40 180,36 210,33 240,28 270,22 300,14 315,8 330,60 360,56 390,54 420,51 450,48 480,44 510,39 540,32 570,24 600,16"/>
-      <line class="trace-pit" x1="322" x2="322" y1="0" y2="70"/>
-    </svg>
+    <div class="hero-grid">
+      <div class="hero-main">
+        <h1>Predicting <span class="hl">F1 pit stops</span> from lap times with a hidden Markov model</h1>
+        <p class="lead">Tyre wear is never published. We infer it from lap times and ask: does that tell us when a driver is about to pit?</p>
+        <svg class="hero-trace" viewBox="0 0 600 70" preserveAspectRatio="none" aria-hidden="true">
+          <polyline class="trace-a" points="0,52 30,48 60,47 90,44 120,42 150,40 180,36 210,33 240,28 270,22 300,14 315,8 330,60 360,56 390,54 420,51 450,48 480,44 510,39 540,32 570,24 600,16"/>
+          <line class="trace-pit" x1="322" x2="322" y1="0" y2="70"/>
+        </svg>
+        <div class="meta">
+          <span>D A S K R Manognya <span class="muted">24110097</span></span>
+          <span>Aryan Kumar <span class="muted">24110055</span></span>
+          <span><a href="https://github.com/AceAryan/f1-pitstop-hmm">Source code on GitHub →</a></span>
+        </div>
+      </div>
+
+      <aside class="verdict" aria-labelledby="verdict-title">
+        <p class="eyebrow">The answer, on the 2020 test season</p>
+        <p class="verdict-word" id="verdict-title">No.</p>
+        <p class="verdict-text">The HMM does no better than counting laps. Every model catches fewer than 1 pit stop in 10.</p>
+        <div class="vbars" role="img" aria-label="F1 at plus or minus 2 laps: tyre-age rule 0.107, HMM 0.106, HMM without tyre age 0.101, logistic regression 0.085">
+          <div class="vbar"><span class="vlab">Tyre-age rule</span><span class="vtrack"><span style="width:100%;background:var(--age)"></span></span><span class="vnum">0.107</span></div>
+          <div class="vbar"><span class="vlab">HMM</span><span class="vtrack"><span style="width:99.1%;background:var(--hmm)"></span></span><span class="vnum">0.106</span></div>
+          <div class="vbar"><span class="vlab">HMM, no tyre age</span><span class="vtrack"><span style="width:94.4%;background:var(--noage)"></span></span><span class="vnum">0.101</span></div>
+          <div class="vbar"><span class="vlab">Logistic regression</span><span class="vtrack"><span style="width:79.4%;background:var(--logit)"></span></span><span class="vnum">0.085</span></div>
+        </div>
+        <p class="vfoot">F1 score at ±2 laps · <a href="#results">See the results →</a></p>
+      </aside>
+    </div>
+
     <div class="hero-stats">
-      <div><span class="hs-num">196</span><span class="hs-lab">races</span></div>
+      <div><span class="hs-num">196</span><span class="hs-lab">races, 2011–2020</span></div>
       <div><span class="hs-num">222k</span><span class="hs-lab">laps</span></div>
       <div><span class="hs-num">8,031</span><span class="hs-lab">pit stops</span></div>
       <div><span class="hs-num">±2</span><span class="hs-lab">lap window</span></div>
     </div>
-    <div class="meta">
-      <span>D A S K R Manognya <span class="muted">24110097</span></span>
-      <span>Aryan Kumar <span class="muted">24110055</span></span>
-      <span><a href="https://github.com/AceAryan/f1-pitstop-hmm">Source code on GitHub →</a></span>
-    </div>
+
     <div id="placeholder-notice" class="notice" role="status" hidden>
       <strong>Placeholder data in use.</strong>
       The final results are not ready yet. Lap times and pit-stop laps shown here are real (Ergast data),
@@ -49,373 +68,449 @@
     <ul>
       <li><a href="#question">Question</a></li>
       <li><a href="#data">Data</a></li>
-      <li><a href="#preprocessing">Preprocessing</a></li>
-      <li><a href="#methods">Methods</a></li>
-      <li><a href="#evaluation">Evaluation</a></li>
+      <li><a href="#methods">Method</a></li>
       <li><a href="#results">Results</a></li>
       <li><a href="#explorer">Race explorer</a></li>
       <li><a href="#errors">Errors</a></li>
-      <li><a href="#limitations">Limitations</a></li>
       <li><a href="#conclusion">Conclusion</a></li>
-      <li><a href="#reproduce">Reproduce</a></li>
-      <li><a href="#team">Team &amp; AI use</a></li>
+      <li><a href="#limitations">More</a></li>
     </ul>
   </div>
 </nav>
 
-<main class="wrap">
+<main>
 
 <!-- 1. QUESTION -->
 <section id="question">
-  <h2><span class="num">01</span>Question</h2>
-  <p class="callout"><strong>Using only the lap times a team has seen so far, can a model tell when a Formula 1 driver is about to pit, within ±2 laps of the actual stop, better than a tyre-age rule and a logistic-regression classifier?</strong></p>
-  <p>Teams pit mostly because tyres wear out, and worn tyres make lap times slower. But tyre condition is not public. So we treat it as a <strong>hidden state</strong> and infer it from lap times with a <strong>hidden Markov model (HMM)</strong> that we wrote from scratch.</p>
-  <p>After every lap, each model decides whether to raise an <strong>alarm</strong> ("this driver will pit now"). It may only use laps that have already happened. An alarm counts as correct if a real pit stop happens within ±2 laps of it.</p>
-  <h3>What we claim, and what we don't</h3>
-  <ul>
-    <li>Pit stops are only a <em>proxy</em> for tyre wear. Teams also pit for strategy (undercuts, safety cars, traffic), so some stops cannot be predicted from lap times at all.</li>
-    <li>This is prediction, not causation.</li>
-    <li>A useful answer is an honest comparison with simple baselines on a season the models never saw, plus a look at where they fail. A modest or negative result is still an answer.</li>
-  </ul>
-  <p class="small muted">Terms used below: a <strong>stint</strong> is the run of laps between two pit stops (or between the last stop and the finish). An <strong>alarm</strong> is a model's call to pit on a given lap.</p>
+  <div class="wrap">
+    <h2><span class="num">01</span>Question</h2>
+    <div class="split">
+      <div>
+        <p class="question">Using only the lap times a team has seen so far, can a model tell when a Formula 1 driver is about to pit, within ±2 laps of the actual stop, better than a tyre-age rule and a logistic-regression classifier?</p>
+        <p>Teams pit mostly because tyres wear out, and worn tyres make lap times slower. But tyre condition is not public. So we treat it as a <strong>hidden state</strong> and infer it from lap times with a <strong>hidden Markov model (HMM)</strong> that we wrote from scratch.</p>
+        <p>After every lap, each model decides whether to raise an <strong>alarm</strong> ("this driver will pit now"). It may only use laps that have already happened. An alarm counts as correct if a real pit stop happens within ±2 laps of it.</p>
+      </div>
+      <div class="card side">
+        <p class="lbl">What we claim, and what we don't</p>
+        <ul>
+          <li>Pit stops are only a <em>proxy</em> for tyre wear. Teams also pit for strategy (undercuts, safety cars, traffic), so some stops cannot be predicted from lap times at all.</li>
+          <li>This is prediction, not causation.</li>
+          <li>A useful answer is an honest comparison with simple baselines on a season the models never saw, plus a look at where they fail. A modest or negative result is still an answer.</li>
+        </ul>
+        <p class="lbl">Two terms</p>
+        <p class="small">A <strong>stint</strong> is the run of laps between two pit stops (or between the last stop and the finish). An <strong>alarm</strong> is a model's call to pit on a given lap.</p>
+      </div>
+    </div>
+  </div>
 </section>
 
-<!-- 2. DATA -->
+<!-- 2. DATA (+ preprocessing) -->
 <section id="data">
-  <h2><span class="num">02</span>Data</h2>
-  <p>We use the Kaggle <a href="https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020">"Formula 1 World Championship"</a> dataset (Rohan Rao), which is built from the <a href="https://ergast.com/mrd/">Ergast</a> motor-racing database. We use four tables: <code>races.csv</code>, <code>lap_times.csv</code>, <code>pit_stops.csv</code> and <code>results.csv</code>.</p>
-  <p><strong>One row = one lap by one driver in one race.</strong> Scope: all 196 races from 2011 (start of the Pirelli era) to 2020.</p>
-  <div class="grid four">
-    <div class="card"><div class="stat">196</div><div class="stat-label">races, 2011–2020</div></div>
-    <div class="card"><div class="stat">222,097</div><div class="stat-label">raw laps</div></div>
-    <div class="card"><div class="stat">8,031</div><div class="stat-label">pit stops</div></div>
-    <div class="card"><div class="stat">197,068</div><div class="stat-label">laps after cleaning, in 11,242 stints</div></div>
-  </div>
-  <p style="margin-top:12px">Of the 11,242 stints, 7,318 end in a pit stop. The other ~35% end at the chequered flag, so a model that raises an alarm late in every stint will be wrong about a third of the time by design.</p>
+  <div class="wrap">
+    <h2><span class="num">02</span>Data</h2>
+    <p class="takeaway">Ten seasons of real race data. About a third of all stints end at the chequered flag, not in the pits, which matters later.</p>
+    <div class="grid four">
+      <div class="card"><div class="stat">196</div><div class="stat-label">races, 2011–2020</div></div>
+      <div class="card"><div class="stat">222,097</div><div class="stat-label">raw laps</div></div>
+      <div class="card"><div class="stat">8,031</div><div class="stat-label">pit stops</div></div>
+      <div class="card"><div class="stat">197,068</div><div class="stat-label">laps after cleaning, in 11,242 stints</div></div>
+    </div>
 
-  <h3>What the data does not have</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Missing</th><th>Why it matters</th><th>What we did</th></tr></thead>
-      <tbody>
-        <tr><td>Tyre compound</td><td>Soft tyres wear much faster than hard ones</td><td>One model for all compounds; tyre age scaled by a typical life of 40 laps</td></tr>
-        <tr><td>Track status (safety car)</td><td>Teams pit cheaply under safety cars, whatever the tyre state</td><td>Cannot remove all safety-car laps; very slow laps are dropped (see cleaning)</td></tr>
-        <tr><td>Weather</td><td>Wet races change lap times and force tyre changes</td><td>Wet races cannot be identified reliably</td></tr>
-        <tr><td>Sector times</td><td>Would give a finer signal of wear</td><td>Lap times only</td></tr>
-      </tbody>
-    </table>
-  </div>
+    <div class="split">
+      <div>
+        <p>We use the Kaggle <a href="https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020">"Formula 1 World Championship"</a> dataset (Rohan Rao), built from the <a href="https://ergast.com/mrd/">Ergast</a> motor-racing database: <code>races.csv</code>, <code>lap_times.csv</code>, <code>pit_stops.csv</code> and <code>results.csv</code>.</p>
+        <p><strong>One row = one lap by one driver in one race.</strong> Scope: all 196 races from 2011 (start of the Pirelli era) to 2020.</p>
+        <p>Of the 11,242 stints, 7,318 end in a pit stop. The other ~35% end at the chequered flag, so a model that raises an alarm late in every stint will be wrong about a third of the time by design.</p>
+        <div class="callout info">
+          <strong>Why not FastF1?</strong> Our original plan used the FastF1 library, which has compounds and track status. On 15 October 2026, F1 moved its live-timing archive behind a paid F1 TV subscription, so we switched to Ergast/Kaggle and lost those columns.
+        </div>
+      </div>
+      <div>
+        <p class="lbl">What the data does not have</p>
+        <div class="table-wrap wrap-text">
+          <table>
+            <thead><tr><th>Missing</th><th>Why it matters</th><th>What we did</th></tr></thead>
+            <tbody>
+              <tr><td>Tyre compound</td><td>Soft tyres wear much faster than hard ones</td><td>One model for all compounds; tyre age scaled by a typical life of 40 laps</td></tr>
+              <tr><td>Track status (safety car)</td><td>Teams pit cheaply under safety cars, whatever the tyre state</td><td>Cannot remove all safety-car laps; very slow laps are dropped</td></tr>
+              <tr><td>Weather</td><td>Wet races change lap times and force tyre changes</td><td>Wet races cannot be identified reliably</td></tr>
+              <tr><td>Sector times</td><td>Would give a finer signal of wear</td><td>Lap times only</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-  <div class="callout info">
-    <strong>Why not FastF1?</strong> Our original plan used the FastF1 library, which has compounds and track status. On 15 October 2026, F1 moved its live-timing archive behind a paid F1 TV subscription, so we switched to Ergast/Kaggle and lost those columns.
+    <details>
+      <summary>Seasons, licence and why the study stops at 2020</summary>
+      <p>The Kaggle CSVs cover 1950–2024. We use 2011–2020 only; 2021–2024 were never loaded by the pipeline, so they remain an untouched second test set for future work. The dataset is released under <strong>CC0: Public Domain</strong>, which is why the four CSVs can be committed to this public repository.</p>
+      <p>The 2011–2020 window and the train / validation / test split were fixed in our proposal, before any model was run. We kept them when we moved from FastF1 to Kaggle so that the 2020 test season stayed untouched.</p>
+    </details>
+
+    <div id="preprocessing" class="sub">
+      <h3>From laps to features</h3>
+      <p>Each lap becomes three numbers. Each one uses only the current lap and earlier laps <em>in the same stint</em>.</p>
+      <div class="grid three">
+        <div class="card feat"><span class="feat-n">1</span><p><strong>Lap-time delta</strong><br>lap time minus the best lap so far in this stint</p></div>
+        <div class="card feat"><span class="feat-n">2</span><p><strong>Rolling degradation</strong><br>3-lap rolling mean of the delta</p></div>
+        <div class="card feat"><span class="feat-n">3</span><p><strong>Tyre age</strong><br>laps kept so far in the stint ÷ 40</p></div>
+      </div>
+
+      <p class="lbl" style="margin-top:22px">Chronological split: no test leakage</p>
+      <div class="timeline" role="img" aria-label="Training 2011 to 2018, 158 races; validation 2019, 21 races; test 2020, 17 races">
+        <div class="tl train"><strong>2011–2018</strong><span>Training · 158 races</span></div>
+        <div class="tl val"><strong>2019</strong><span>Validation · 21</span></div>
+        <div class="tl test"><strong>2020</strong><span>Test, once · 17</span></div>
+      </div>
+      <p class="small muted">2019 picks the number of HMM states (2, 3, 4) and every alarm threshold. Final models are refit on 2011–2019 with the 2019 settings, then run once on 2020.</p>
+
+      <details>
+        <summary>Cleaning rules and leakage checks</summary>
+        <ul>
+          <li>Drop the first lap of each race (standing start, not representative).</li>
+          <li>Drop pit-in and pit-out laps (time lost in the pit lane, not on tyres).</li>
+          <li>Drop laps slower than 1.35× the driver's median lap in that race (safety cars, incidents, traffic).</li>
+          <li>Stints are inferred from pit-stop laps, since Ergast has no stint column.</li>
+          <li>The feature scaler is fit on training seasons only.</li>
+          <li>Nothing is chosen on 2020. The pipeline refuses to run the 2020 test a second time or to retune after it.</li>
+          <li>Splitting by season (not by random laps) stops laps from the same race leaking between train and test.</li>
+        </ul>
+        <p class="small muted">Known issue: the median in the 1.35× rule is taken over the whole race, so it uses a little information from later laps. It only decides which laps are dropped, not any feature value, but a fully causal version would use the median so far.</p>
+      </details>
+    </div>
   </div>
-  <p><strong>Seasons and licence.</strong> The Kaggle CSVs cover 1950–2024. We use 2011–2020 only; 2021–2024 were never loaded by the pipeline, so they remain an untouched second test set for future work. The dataset is released under <strong>CC0: Public Domain</strong>, which is why the four CSVs can be committed to this public repository.</p>
-  <p>The 2011–2020 window and the train / validation / test split were fixed in our proposal, before any model was run. We kept them when we moved from FastF1 to Kaggle so that the 2020 test season stayed untouched.</p>
 </section>
 
-<!-- 3. PREPROCESSING -->
-<section id="preprocessing">
-  <h2><span class="num">03</span>Preprocessing</h2>
-  <h3>Cleaning</h3>
-  <ul>
-    <li>Drop the first lap of each race (standing start, not representative).</li>
-    <li>Drop pit-in and pit-out laps (time lost in the pit lane, not on tyres).</li>
-    <li>Drop laps slower than 1.35× the driver's median lap in that race (safety cars, incidents, traffic).</li>
-    <li>Stints are inferred from pit-stop laps, since Ergast has no stint column.</li>
-  </ul>
-  <p class="small muted">Known issue: the median in the 1.35× rule is taken over the whole race, so it uses a little information from later laps. It only decides which laps are dropped, not any feature value, but a fully causal version would use the median so far.</p>
-
-  <h3>Features per lap</h3>
-  <p>Each feature uses only the current lap and earlier laps <em>in the same stint</em>:</p>
-  <ol>
-    <li><strong>Lap-time delta</strong> — lap time minus the best lap so far in this stint.</li>
-    <li><strong>Rolling degradation</strong> — 3-lap rolling mean of the delta.</li>
-    <li><strong>Tyre age</strong> — laps kept so far in the stint ÷ 40.</li>
-  </ol>
-
-  <h3>Chronological split (no test leakage)</h3>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Seasons</th><th>Role</th><th class="num">Races</th></tr></thead>
-      <tbody>
-        <tr><td>2011–2018</td><td>Training</td><td class="num">158</td></tr>
-        <tr><td>2019</td><td>Validation: pick the number of HMM states (2, 3, 4) and every alarm threshold</td><td class="num">21</td></tr>
-        <tr><td>2020</td><td>Test, run once. Final models refit on 2011–2019 with the 2019 settings</td><td class="num">17</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <ul style="margin-top:12px">
-    <li>The feature scaler is fit on training seasons only.</li>
-    <li>Nothing is chosen on 2020. The pipeline refuses to run the 2020 test a second time or to retune after it.</li>
-    <li>Splitting by season (not by random laps) stops laps from the same race leaking between train and test.</li>
-  </ul>
-</section>
-
-<!-- 4. METHODS -->
+<!-- 3. METHOD (+ evaluation) -->
 <section id="methods">
-  <h2><span class="num">04</span>Baselines and methods</h2>
-  <div class="grid two">
-    <div class="card">
-      <h3><span class="sw" style="background:var(--age)"></span> Tyre-age rule <span class="muted small">(baseline)</span></h3>
-      <p>One alarm per stint, when tyre age passes a threshold. Threshold picked on 2019 from 0.60–0.95 (24–38 laps). Asks: is counting laps enough?</p>
-    </div>
-    <div class="card">
-      <h3><span class="sw" style="background:var(--logit)"></span> Logistic regression <span class="muted small">(baseline)</span></h3>
-      <p>Per-lap classifier on the three features, labelled "pit within the next 3 laps", with class weights for the rare positives. An alarm is raised at the start of each run of positive laps, so it can raise several per stint.</p>
-    </div>
-    <div class="card">
-      <h3><span class="sw" style="background:var(--hmm)"></span> HMM <span class="muted small">(main method)</span></h3>
-      <p>Gaussian HMM written from scratch (scaled forward–backward, Viterbi, Baum–Welch). Trained <em>without pit labels</em>. After each lap, <strong>forward filtering</strong> gives P(worn | laps so far). One alarm per stint when this passes a threshold (0.3–0.9, picked on 2019).</p>
-    </div>
-    <div class="card">
-      <h3><span class="sw" style="background:var(--noage)"></span> HMM without tyre age <span class="muted small">(ablation)</span></h3>
-      <p>Same HMM, but tyre age removed from its inputs. If it does as well as the full HMM, the lap times carry the signal; if it collapses, the HMM was mostly counting laps.</p>
-    </div>
-  </div>
-
-  <h3>How the HMM is set up</h3>
-  <svg class="states-diagram chart" viewBox="0 0 520 120" role="img" aria-label="Left-to-right two-state HMM: Fresh to Worn; each state can stay, and Fresh can move to Worn, never back">
-    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="currentColor"/></marker></defs>
-    <g style="color:var(--muted)">
-      <path d="M200 70 H312" stroke="currentColor" stroke-width="2" marker-end="url(#arr)"/>
-      <path d="M130 45 C110 5 190 5 170 45" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arr)"/>
-      <path d="M350 45 C330 5 410 5 390 45" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arr)"/>
-    </g>
-    <circle cx="150" cy="70" r="42" fill="var(--fresh)" opacity="0.9"/>
-    <circle cx="370" cy="70" r="42" fill="var(--critical)" opacity="0.9"/>
-    <text x="150" y="75" text-anchor="middle" style="fill:#fff;font-size:14px;font-weight:700">Fresh</text>
-    <text x="370" y="75" text-anchor="middle" style="fill:#fff;font-size:14px;font-weight:700">Worn</text>
-  </svg>
-  <ul>
-    <li><strong>Left-to-right transitions:</strong> tyres never recover, so the model can stay fresh, move to worn, or stay worn, but never go back.</li>
-    <li><strong>Starts fresh:</strong> π = [1, 0]. Each stint is a new sequence.</li>
-    <li><strong>Gaussian emissions:</strong> each state has its own mean and spread for the lap features.</li>
-    <li><strong>Filtering, not Viterbi:</strong> Viterbi looks at the whole stint, including the future. Forward filtering uses only laps up to now, which is what a pit wall actually has.</li>
-    <li><strong>Two states, chosen on 2019:</strong> we tried 2, 3 and 4 states. The best 2019 F1 was 0.091 with 2 states, against 0.089 with 4 and 0.058 with 3, so the final model has no separate "degrading" state. Both the full HMM and the ablation chose 2 states.</li>
-  </ul>
-  <p><strong>Why an HMM?</strong> There are no labels for tyre condition, laps within a stint depend on each other, and the learned states and transitions can be read and checked.</p>
-  <p class="small muted">Two checks from the proposal were not done: a Gaussian mixture model (an HMM with no time component) and a comparison of our HMM against <code>hmmlearn</code>. See <a href="#limitations">Limitations</a>. The third, alarms before vs after the pit, is in <a href="#errors">Errors</a>.</p>
-</section>
-
-<!-- 5. EVALUATION -->
-<section id="evaluation">
-  <h2><span class="num">05</span>Evaluation design</h2>
-  <ul>
-    <li><strong>Matching:</strong> within each driver-race, alarms are matched one-to-one to real pit stops. An alarm is a hit if its pit is within ±2 laps. Extra alarms are false positives; unmatched pits are misses.</li>
-    <li><strong>Pooled metrics:</strong> precision, recall and F1 are computed from TP/FP/FN summed over all driver-races, not averaged per driver (so drivers with one stop don't count as much as a whole race).</li>
-    <li><strong>Sensitivity:</strong> results also at ±1 and ±3 laps.</li>
-    <li><strong>Timing:</strong> the distribution of alarm lap − pit lap shows whether models are early or late.</li>
-    <li><strong>Not accuracy:</strong> pits are about 1 lap in 28, so "never pit" would score over 96% accuracy.</li>
-    <li><strong>Tuning is separate from testing:</strong> all choices use 2019; 2020 is used once.</li>
-  </ul>
-
-  <h3>Interactive: the precision–recall trade-off on 2019</h3>
-  <p>Each threshold below was tried on the 2019 validation season. A lower threshold raises alarms earlier and more often (higher recall, more false alarms); a higher one is pickier. The ringed point is the setting chosen by best F1 and used on 2020.</p>
-  <div class="card" id="threshold-control">
-    <div class="controls">
-      <label>Model
-        <select id="thr-method">
-          <option value="HMM">HMM</option>
-          <option value="HMMNoAge">HMM without tyre age</option>
-          <option value="TyreAge">Tyre-age rule</option>
-        </select>
-      </label>
-      <label class="grow">Threshold: <strong id="thr-value">–</strong>
-        <input type="range" id="thr-slider" min="0" max="6" step="1" value="0" aria-describedby="thr-value">
-      </label>
-    </div>
-    <div class="pr-layout">
-      <div>
-        <svg id="pr-chart" class="chart" role="img" aria-label="Precision versus recall for each threshold"></svg>
-        <div class="legend">
-          <span><span class="sw" id="pr-sw" style="background:var(--hmm)"></span>thresholds tried</span>
-          <span><span class="sw" style="background:transparent;border:2px solid var(--text);border-radius:50%"></span>chosen on 2019</span>
-          <span><span class="sw" style="background:var(--logit);transform:rotate(45deg)"></span>logistic regression (no threshold to tune)</span>
-        </div>
+  <div class="wrap">
+    <h2><span class="num">03</span>Method</h2>
+    <p class="takeaway">An HMM written from scratch, against two simple baselines, plus a version of the HMM with tyre age removed to see what the lap times alone can do.</p>
+    <div class="grid two">
+      <div class="card model" style="--c:var(--hmm)">
+        <p class="model-tag">Main method</p>
+        <h3>HMM</h3>
+        <p>Gaussian HMM written from scratch (scaled forward–backward, Viterbi, Baum–Welch). Trained <em>without pit labels</em>. After each lap, <strong>forward filtering</strong> gives P(worn | laps so far). One alarm per stint when this passes a threshold (0.3–0.9, picked on 2019).</p>
       </div>
-      <div>
-        <div class="grid" style="grid-template-columns:repeat(3,1fr)">
-          <div class="card"><div class="stat" id="thr-p">–</div><div class="stat-label">precision</div></div>
-          <div class="card"><div class="stat" id="thr-r">–</div><div class="stat-label">recall</div></div>
-          <div class="card"><div class="stat" id="thr-f">–</div><div class="stat-label">F1</div></div>
-        </div>
-        <p class="small" id="thr-text" style="margin-top:10px"></p>
-        <svg id="f1-chart" class="chart" role="img" aria-label="F1 by threshold"></svg>
+      <div class="card model" style="--c:var(--noage)">
+        <p class="model-tag">Ablation</p>
+        <h3>HMM without tyre age</h3>
+        <p>Same HMM, but tyre age removed from its inputs. If it does as well as the full HMM, the lap times carry the signal; if it collapses, the HMM was mostly counting laps.</p>
+      </div>
+      <div class="card model" style="--c:var(--age)">
+        <p class="model-tag">Baseline</p>
+        <h3>Tyre-age rule</h3>
+        <p>One alarm per stint, when tyre age passes a threshold. Threshold picked on 2019 from 0.60–0.95 (24–38 laps). Asks: is counting laps enough?</p>
+      </div>
+      <div class="card model" style="--c:var(--logit)">
+        <p class="model-tag">Baseline</p>
+        <h3>Logistic regression</h3>
+        <p>Per-lap classifier on the three features, labelled "pit within the next 3 laps", with class weights for the rare positives. An alarm is raised at the start of each run of positive laps, so it can raise several per stint.</p>
       </div>
     </div>
+
+    <h3>How the HMM is set up</h3>
+    <div class="split">
+      <div class="card diagram-card">
+        <svg class="states-diagram chart" viewBox="0 0 520 120" role="img" aria-label="Left-to-right two-state HMM: Fresh to Worn; each state can stay, and Fresh can move to Worn, never back">
+          <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="currentColor"/></marker></defs>
+          <g style="color:var(--muted)">
+            <path d="M200 70 H312" stroke="currentColor" stroke-width="2" marker-end="url(#arr)"/>
+            <path d="M130 45 C110 5 190 5 170 45" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arr)"/>
+            <path d="M350 45 C330 5 410 5 390 45" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arr)"/>
+          </g>
+          <circle cx="150" cy="70" r="42" fill="var(--fresh)" opacity="0.9"/>
+          <circle cx="370" cy="70" r="42" fill="var(--critical)" opacity="0.9"/>
+          <text x="150" y="75" text-anchor="middle" style="fill:#fff;font-size:14px;font-weight:700">Fresh</text>
+          <text x="370" y="75" text-anchor="middle" style="fill:#fff;font-size:14px;font-weight:700">Worn</text>
+        </svg>
+        <p class="small muted" style="text-align:center;margin:0">Two states, chosen on 2019. Tyres never recover, so there is no arrow back.</p>
+      </div>
+      <ul class="tight">
+        <li><strong>Left-to-right transitions:</strong> the model can stay fresh, move to worn, or stay worn, but never go back.</li>
+        <li><strong>Starts fresh:</strong> π = [1, 0]. Each stint is a new sequence.</li>
+        <li><strong>Gaussian emissions:</strong> each state has its own mean and spread for the lap features.</li>
+        <li><strong>Filtering, not Viterbi:</strong> Viterbi looks at the whole stint, including the future. Forward filtering uses only laps up to now, which is what a pit wall actually has.</li>
+        <li><strong>Two states, chosen on 2019:</strong> we tried 2, 3 and 4 states. The best 2019 F1 was 0.091 with 2 states, against 0.089 with 4 and 0.058 with 3. Both the full HMM and the ablation chose 2 states.</li>
+        <li><strong>Why an HMM?</strong> There are no labels for tyre condition, laps within a stint depend on each other, and the learned states and transitions can be read and checked.</li>
+      </ul>
+    </div>
+    <p class="small muted">Two checks from the proposal were not done: a Gaussian mixture model (an HMM with no time component) and a comparison of our HMM against <code>hmmlearn</code>. See <a href="#limitations">Limitations</a>. The third, alarms before vs after the pit, is in <a href="#errors">Errors</a>.</p>
+
+    <div id="evaluation" class="sub">
+      <h3>How we score the models</h3>
+      <div class="grid three rules">
+        <div><strong>One-to-one matching</strong><p>Within each driver-race, each alarm is matched to at most one real pit stop. Within ±2 laps is a hit; extra alarms are false positives; unmatched pits are misses.</p></div>
+        <div><strong>Pooled F1, not accuracy</strong><p>Precision, recall and F1 from TP/FP/FN summed over all driver-races. Pits are about 1 lap in 28, so "never pit" would score over 96% accuracy.</p></div>
+        <div><strong>2019 tunes, 2020 tests</strong><p>All choices use 2019; 2020 is used once. Results are also reported at ±1 and ±3 laps, and alarm timing shows whether models are early or late.</p></div>
+      </div>
+
+      <p class="lbl" style="margin-top:26px">Interactive: the precision–recall trade-off on 2019</p>
+      <p>Each threshold was tried on the 2019 validation season. A lower threshold raises alarms earlier and more often (higher recall, more false alarms); a higher one is pickier. The ringed point is the setting chosen by best F1 and used on 2020.</p>
+      <div class="card" id="threshold-control">
+        <div class="controls">
+          <label>Model
+            <select id="thr-method">
+              <option value="HMM">HMM</option>
+              <option value="HMMNoAge">HMM without tyre age</option>
+              <option value="TyreAge">Tyre-age rule</option>
+            </select>
+          </label>
+          <label class="grow">Threshold: <strong id="thr-value">–</strong>
+            <input type="range" id="thr-slider" min="0" max="6" step="1" value="0" aria-describedby="thr-value">
+          </label>
+        </div>
+        <div class="pr-layout">
+          <div>
+            <svg id="pr-chart" class="chart" role="img" aria-label="Precision versus recall for each threshold"></svg>
+            <div class="legend">
+              <span><span class="sw" id="pr-sw" style="background:var(--hmm)"></span>thresholds tried</span>
+              <span><span class="sw" style="background:transparent;border:2px solid var(--text);border-radius:50%"></span>chosen on 2019</span>
+              <span><span class="sw" style="background:var(--logit);transform:rotate(45deg)"></span>logistic regression (no threshold to tune)</span>
+            </div>
+          </div>
+          <div>
+            <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+              <div class="card"><div class="stat" id="thr-p">–</div><div class="stat-label">precision</div></div>
+              <div class="card"><div class="stat" id="thr-r">–</div><div class="stat-label">recall</div></div>
+              <div class="card"><div class="stat" id="thr-f">–</div><div class="stat-label">F1</div></div>
+            </div>
+            <p class="small" id="thr-text" style="margin-top:10px"></p>
+            <svg id="f1-chart" class="chart" role="img" aria-label="F1 by threshold"></svg>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
-<!-- 6. RESULTS -->
+<!-- 4. RESULTS -->
 <section id="results">
-  <h2><span class="num">06</span>Results on the 2020 test season</h2>
-  <p>17 races, 328 driver-races, 515 pit stops. Models refit on 2011–2019 with the settings chosen on 2019, then run once.</p>
-  <div class="controls">
-    <span class="small muted">Matching window:</span>
-    <div class="seg" role="group" aria-label="Matching window">
-      <button type="button" data-tol="1" aria-pressed="false">±1</button>
-      <button type="button" data-tol="2" aria-pressed="true">±2</button>
-      <button type="button" data-tol="3" aria-pressed="false">±3</button>
-    </div>
-  </div>
-  <div class="table-wrap" id="results-table"><p class="loading" style="padding:12px">Loading…</p></div>
-  <svg id="results-chart" class="chart" style="margin-top:12px" role="img" aria-label="F1 by model"></svg>
-  <h3>What the numbers say</h3>
-  <p><strong>The HMM does not beat the simple tyre-age rule.</strong> At ±2 laps the four models are within 0.022 F1 of each other: tyre-age rule 0.107, HMM 0.106, HMM without tyre age 0.101, logistic regression 0.085. Every model catches fewer than 1 stop in 10 (the HMM finds 46 of 515). At ±1 lap all are between 0.043 and 0.062. Only at ±3 laps does the HMM pull ahead (0.180 against 0.137 for the tyre-age rule), which says its alarms tend to land a few laps before the stop rather than on it.</p>
-  <p><strong>The HMM is reading lap times, not just counting laps.</strong> Removing tyre age from its inputs costs only 0.005 F1 at ±2 (0.106 → 0.101) and 0.014 at ±3. The ablation still does almost as well as the tyre-age rule, which uses nothing <em>but</em> lap counts. But the lap-time signal is weak: it is about as informative as a lap counter, not more.</p>
-  <h3>Settings chosen on 2019</h3>
-  <div class="table-wrap wrap-text">
-    <table>
-      <thead><tr><th>Model</th><th>Setting used on 2020</th><th class="num">2019 F1 (±2)</th></tr></thead>
-      <tbody>
-        <tr><td>HMM</td><td>2 states, alarm when P(worn) ≥ 0.8</td><td class="num">0.091</td></tr>
-        <tr><td>HMM without tyre age</td><td>2 states, alarm when P(worn) ≥ 0.9</td><td class="num">0.086</td></tr>
-        <tr><td>Tyre-age rule</td><td>alarm at tyre age 0.6 (24 kept laps), the lowest value tried</td><td class="num">0.098</td></tr>
-        <tr><td>Logistic regression</td><td>default decision boundary (nothing to tune)</td><td class="num">0.064</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<!-- 7. EXPLORER -->
-<section id="explorer">
-  <h2><span class="num">07</span>Race explorer (2020)</h2>
-  <p>Pick a race and driver, then step through the race. Everything is drawn only up to the current lap, so you see what the models knew at that moment. Watch the HMM's belief that the tyres are worn build up during a stint, and compare each model's alarms with the real pit stops.</p>
-  <div class="card explorer" id="explorer-card">
+  <div class="wrap">
+    <h2><span class="num">04</span>Results on 2020</h2>
+    <p class="takeaway big"><strong>The HMM does not beat the simple tyre-age rule.</strong> All four models land around F1 = 0.1 at ±2 laps.</p>
+    <p class="muted">17 races, 328 driver-races, 515 pit stops. Models refit on 2011–2019 with the settings chosen on 2019, then run once.</p>
     <div class="controls">
-      <label class="grow">Race <select id="ex-race"></select></label>
-      <label class="grow">Driver <select id="ex-driver"></select></label>
-      <label>Belief from
-        <select id="ex-model">
-          <option value="hmm">HMM</option>
-          <option value="noage">HMM without tyre age</option>
-        </select>
-      </label>
+      <span class="small muted">Matching window:</span>
+      <div class="seg" role="group" aria-label="Matching window">
+        <button type="button" data-tol="1" aria-pressed="false">±1</button>
+        <button type="button" data-tol="2" aria-pressed="true">±2</button>
+        <button type="button" data-tol="3" aria-pressed="false">±3</button>
+      </div>
     </div>
-    <div class="slider-row">
-      <button type="button" id="ex-prev" aria-label="Previous lap">◀</button>
-      <button type="button" id="ex-play" aria-label="Play">▶ Play</button>
-      <button type="button" id="ex-next" aria-label="Next lap">▶</button>
-      <input type="range" id="ex-lap" min="1" max="1" value="1" aria-label="Lap">
+    <div class="results-layout">
+      <div class="table-wrap" id="results-table"><p class="loading" style="padding:12px">Loading…</p></div>
+      <div class="card chart-card"><svg id="results-chart" class="chart" role="img" aria-label="F1 by model"></svg></div>
     </div>
-    <div class="readout">
-      <div class="card"><div class="stat" id="ex-lapno">–</div><div class="stat-label">lap</div></div>
-      <div class="card"><div class="stat" id="ex-laptime">–</div><div class="stat-label">lap time</div></div>
-      <div class="card"><div class="stat" id="ex-stint">–</div><div class="stat-label">stint</div></div>
-      <div class="card"><div class="stat" id="ex-age">–</div><div class="stat-label">tyre age (kept laps)</div></div>
-    </div>
-    <div class="belief" id="ex-belief" aria-live="polite"></div>
-    <div class="events" id="ex-events" aria-live="polite"></div>
 
-    <div class="chart-title">Lap time (seconds)</div>
-    <svg id="ex-times" class="chart" role="img" aria-label="Lap times so far"></svg>
-    <div class="chart-title">Belief: probability of each tyre state</div>
-    <svg id="ex-probs" class="chart" role="img" aria-label="HMM state probabilities so far"></svg>
-    <div class="chart-title">Alarms and real pit stops</div>
-    <svg id="ex-alarms" class="chart" role="img" aria-label="Alarms by model and real pits"></svg>
-    <div class="legend" id="ex-legend"></div>
-    <p class="small muted">Hollow dots are laps the models did not use (first lap, pit-in/out laps, very slow laps). On those laps the belief is carried over from the last used lap. Dashed lines are real pit stops. The dotted line on the belief chart is the alarm threshold.</p>
-    <div id="ex-summary" class="small"></div>
+    <div class="grid three findings">
+      <div class="card finding">
+        <p class="finding-num">0.022</p>
+        <p class="finding-title">A four-way tie</p>
+        <p>At ±2 laps all four models are within 0.022 F1: tyre-age rule 0.107, HMM 0.106, HMM without tyre age 0.101, logistic regression 0.085. The HMM finds 46 of 515 stops.</p>
+      </div>
+      <div class="card finding">
+        <p class="finding-num">0.180</p>
+        <p class="finding-title">Better with a wider window</p>
+        <p>At ±1 lap all models score 0.043–0.062. Only at ±3 does the HMM pull ahead (0.180 against 0.137 for the tyre-age rule): its alarms tend to land a few laps before the stop rather than on it.</p>
+      </div>
+      <div class="card finding">
+        <p class="finding-num">−0.005</p>
+        <p class="finding-title">Lap times carry a weak signal</p>
+        <p>Removing tyre age costs the HMM only 0.005 F1 at ±2 (0.106 → 0.101) and 0.014 at ±3. It reads lap times, not just lap counts, but that signal is about as informative as a lap counter, not more.</p>
+      </div>
+    </div>
+
+    <details>
+      <summary>Settings chosen on 2019</summary>
+      <div class="table-wrap wrap-text">
+        <table>
+          <thead><tr><th>Model</th><th>Setting used on 2020</th><th class="num">2019 F1 (±2)</th></tr></thead>
+          <tbody>
+            <tr><td>HMM</td><td>2 states, alarm when P(worn) ≥ 0.8</td><td class="num">0.091</td></tr>
+            <tr><td>HMM without tyre age</td><td>2 states, alarm when P(worn) ≥ 0.9</td><td class="num">0.086</td></tr>
+            <tr><td>Tyre-age rule</td><td>alarm at tyre age 0.6 (24 kept laps), the lowest value tried</td><td class="num">0.098</td></tr>
+            <tr><td>Logistic regression</td><td>default decision boundary (nothing to tune)</td><td class="num">0.064</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
   </div>
-  <h3>Three races worth opening</h3>
-  <ul>
-    <li><strong>Hungarian GP, Lewis Hamilton:</strong> the HMM's belief crosses its threshold on lap 35 and he pits on lap 37, a correct early alarm the tyre-age rule misses. (The HMM caught 44 stops that the tyre-age rule did not.)</li>
-    <li><strong>Italian GP, any driver around lap 26:</strong> 17 drivers pit on the same lap and no model catches any of them. A whole field stopping at once is the mark of a race interruption, not of tyres wearing out one car at a time.</li>
-    <li><strong>Belgian GP, Lewis Hamilton:</strong> the HMM raises its alarm on lap 42 of 44, in the final stint, and he never pits. Worn tyres near the flag are not changed, so this alarm can never be right.</li>
-  </ul>
-  <p class="small muted">Best races for the HMM: Italy (11 of 35 stops caught) and Belgium (4 of 20). Worst: the 70th Anniversary and Russian GPs (none caught).</p>
 </section>
 
-<!-- 8. ERRORS -->
+<!-- 5. EXPLORER -->
+<section id="explorer">
+  <div class="wrap">
+    <h2><span class="num">05</span>Race explorer</h2>
+    <p class="takeaway">Step through any 2020 race, lap by lap, and see only what the models knew at that moment.</p>
+    <p class="lbl">Start with one of these</p>
+    <div class="picks">
+      <button type="button" class="pick" data-race="Hungarian Grand Prix" data-driver="1" data-lap="70">
+        <span class="pick-tag hit">Correct early alarm</span>
+        <strong>Hungary · Hamilton</strong>
+        <span>The HMM's belief crosses its threshold on lap 35 and he pits on lap 37, a stop the tyre-age rule misses.</span>
+      </button>
+      <button type="button" class="pick" data-race="Italian Grand Prix" data-driver="840" data-lap="30">
+        <span class="pick-tag miss">Missed by everyone</span>
+        <strong>Italy · lap 26</strong>
+        <span>17 drivers pit on the same lap and no model catches any of them: a race interruption, not tyre wear.</span>
+      </button>
+      <button type="button" class="pick" data-race="Belgian Grand Prix" data-driver="1" data-lap="44">
+        <span class="pick-tag miss">False alarm</span>
+        <strong>Belgium · Hamilton</strong>
+        <span>The HMM fires on lap 42 of 44, in the final stint. Worn tyres near the flag are never changed.</span>
+      </button>
+    </div>
+
+    <div class="card explorer" id="explorer-card">
+      <div class="controls">
+        <label class="grow">Race <select id="ex-race"></select></label>
+        <label class="grow">Driver <select id="ex-driver"></select></label>
+        <label>Belief from
+          <select id="ex-model">
+            <option value="hmm">HMM</option>
+            <option value="noage">HMM without tyre age</option>
+          </select>
+        </label>
+      </div>
+      <div class="slider-row">
+        <button type="button" id="ex-prev" aria-label="Previous lap">◀</button>
+        <button type="button" id="ex-play" aria-label="Play">▶ Play</button>
+        <button type="button" id="ex-next" aria-label="Next lap">▶</button>
+        <input type="range" id="ex-lap" min="1" max="1" value="1" aria-label="Lap">
+      </div>
+      <div class="readout">
+        <div class="card"><div class="stat" id="ex-lapno">–</div><div class="stat-label">lap</div></div>
+        <div class="card"><div class="stat" id="ex-laptime">–</div><div class="stat-label">lap time</div></div>
+        <div class="card"><div class="stat" id="ex-stint">–</div><div class="stat-label">stint</div></div>
+        <div class="card"><div class="stat" id="ex-age">–</div><div class="stat-label">tyre age (kept laps)</div></div>
+      </div>
+      <div class="ex-now">
+        <div class="belief" id="ex-belief" aria-live="polite"></div>
+        <div class="events" id="ex-events" aria-live="polite"></div>
+      </div>
+
+      <div class="chart-title">Lap time (seconds)</div>
+      <svg id="ex-times" class="chart" role="img" aria-label="Lap times so far"></svg>
+      <div class="chart-title">Belief: probability of each tyre state</div>
+      <svg id="ex-probs" class="chart" role="img" aria-label="HMM state probabilities so far"></svg>
+      <div class="chart-title">Alarms and real pit stops</div>
+      <svg id="ex-alarms" class="chart" role="img" aria-label="Alarms by model and real pits"></svg>
+      <div class="legend" id="ex-legend"></div>
+      <p class="small muted">Hollow dots are laps the models did not use (first lap, pit-in/out laps, very slow laps). On those laps the belief is carried over from the last used lap. Dashed lines are real pit stops. The dotted line on the belief chart is the alarm threshold. Arrow keys step through laps.</p>
+      <div id="ex-summary" class="small"></div>
+    </div>
+    <p class="small muted">Best races for the HMM: Italy (11 of 35 stops caught) and Belgium (4 of 20). Worst: the 70th Anniversary and Russian GPs (none caught). The HMM caught 44 stops that the tyre-age rule did not.</p>
+  </div>
+</section>
+
+<!-- 6. ERRORS -->
 <section id="errors">
-  <h2><span class="num">08</span>Errors: when and why models miss</h2>
-  <h3>Are alarms early or late?</h3>
-  <p>For every alarm paired with a pit in the same driver-race: alarm lap − pit lap. Negative = early (useful to a team), positive = after the stop had already happened.</p>
-  <div class="controls">
-    <label>Model
-      <select id="timing-method">
-        <option value="HMM">HMM</option>
-        <option value="HMMNoAge">HMM without tyre age</option>
-        <option value="TyreAge">Tyre-age rule</option>
-        <option value="Logistic">Logistic regression</option>
-      </select>
-    </label>
-  </div>
-  <svg id="timing-chart" class="chart" role="img" aria-label="Histogram of alarm lap minus pit lap"></svg>
-  <div class="grid stats" id="timing-stats" style="margin-top:10px"></div>
-  <p class="small muted">Caveat: the timing file pairs each alarm with the nearest unused pit in that driver-race, with no distance limit and not restricted to the same stint. So far-away pairs (the outer bars) are often an alarm in one stint paired with a pit from another, not a real near-miss.</p>
+  <div class="wrap">
+    <h2><span class="num">06</span>Errors: when and why models miss</h2>
+    <p class="takeaway">Most false alarms come in the final stint, where worn tyres are never changed. Most identifiable misses are stops that have nothing to do with gradual wear.</p>
 
-  <h3>False alarms in the final stint</h3>
-  <p>About a third of stints end at the finish, not in the pits. An alarm late in the final stint can never be correct. This table counts alarms in each driver's last stint with no real pit within ±2 laps (computed from the race-explorer file).</p>
-  <div class="table-wrap" id="final-stint-table"><p class="loading" style="padding:12px">Loading…</p></div>
-
-  <h3>Why the HMM misses (counts at ±2, 2020)</h3>
-  <p>In the ±2 matching used for the results, all 46 of the HMM's correct alarms came 1–2 laps <em>before</em> the stop and none on or after it. The timing chart above pairs alarms differently (hence 42), but it also shows no late hits. So the alarm-after-the-pit problem from the tyre-age bug (see <a href="#limitations">Limitations</a>) is gone. The errors fall into a few groups; the groups overlap, so they do not add up to the totals.</p>
-  <div class="table-wrap wrap-text">
-    <table>
-      <thead><tr><th>Error</th><th class="num">Count</th><th>What it points to</th></tr></thead>
-      <tbody>
-        <tr><td>False alarm in the final stint</td><td class="num">186 / 306</td><td>Tyres wear out near the flag but are not changed. The biggest single cause of false alarms.</td></tr>
-        <tr><td>False alarm in an earlier stint, &gt;2 laps from any stop</td><td class="num">120 / 306</td><td>Timing off by more than the window, or a stop the team chose to delay.</td></tr>
-        <tr><td>Missed stop after a short stint (&lt;15 kept laps)</td><td class="num">164 / 469</td><td>Too early for wear to show; usually strategy, damage or an interruption.</td></tr>
-        <tr><td>Missed stop on a "pack" lap (≥5 drivers pit on the same lap)</td><td class="num">138 / 469</td><td>Safety car, red flag or a weather change, which our data cannot flag.</td></tr>
-        <tr><td>Missed stop after a long stint (&gt;35 kept laps)</td><td class="num">28 / 469</td><td>Hard-compound stints that outlast the 40-lap scale.</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p>Final-stint alarms dominate the false alarms, and stops that have nothing to do with gradual wear (short stints, field-wide stops) make up most of the identifiable misses. We cannot split the rest into undercuts or wet races without track-status and weather data.</p>
-</section>
-
-<!-- 9. LIMITATIONS -->
-<section id="limitations">
-  <h2><span class="num">09</span>Limitations and what went wrong</h2>
-
-  <div class="callout">
-    <h3 style="margin-top:0">A bug made our first test results invalid</h3>
-    <p>On 28 October 2026 we found that a pandas <code>merge</code> reset the row index, so <strong>tyre age was read from the wrong laps for about 96% of rows</strong>. At the start of each new stint the feature still carried the old stint's high value, so models raised alarms 1–2 laps <em>after</em> a pit. The symmetric ±2 window counted these as correct. About three quarters of logistic regression's correct alarms came from this.</p>
-    <p>We fixed it by counting kept laps within each stint, then re-ran tuning, training and the 2020 test from scratch. <strong>The first 2020 test was invalid.</strong> No setting was chosen by looking at 2020 results, before or after the fix.</p>
-    <div class="table-wrap">
-      <table>
-        <caption class="small muted" style="text-align:left;padding:8px 10px;caption-side:top">Pre-fix 2020 F1 at ±2 — <strong>invalid, shown only for the record</strong></caption>
-        <thead><tr><th>Model</th><th class="num">F1 (invalid)</th></tr></thead>
-        <tbody>
-          <tr><td>Logistic regression</td><td class="num">0.287</td></tr>
-          <tr><td>Tyre-age rule</td><td class="num">0.128</td></tr>
-          <tr><td>HMM</td><td class="num">0.110</td></tr>
-          <tr><td>HMM without tyre age</td><td class="num">0.101</td></tr>
-        </tbody>
-      </table>
+    <h3>Are alarms early or late?</h3>
+    <p>For every alarm paired with a pit in the same driver-race: alarm lap − pit lap. Negative = early (useful to a team), positive = after the stop had already happened.</p>
+    <div class="card">
+      <div class="controls">
+        <label>Model
+          <select id="timing-method">
+            <option value="HMM">HMM</option>
+            <option value="HMMNoAge">HMM without tyre age</option>
+            <option value="TyreAge">Tyre-age rule</option>
+            <option value="Logistic">Logistic regression</option>
+          </select>
+        </label>
+      </div>
+      <svg id="timing-chart" class="chart" role="img" aria-label="Histogram of alarm lap minus pit lap"></svg>
+      <div class="grid stats" id="timing-stats" style="margin-top:10px"></div>
+      <p class="small muted" style="margin:10px 0 0">Caveat: the timing file pairs each alarm with the nearest unused pit in that driver-race, with no distance limit and not restricted to the same stint. So far-away pairs (the outer bars) are often an alarm in one stint paired with a pit from another, not a real near-miss.</p>
     </div>
-    <p class="small" style="margin-top:8px">Lesson: a symmetric tolerance window rewards alarms that come <em>after</em> the event. That is why we also report the timing of alarms (see <a href="#errors">Errors</a>).</p>
+    <p class="note">In the ±2 matching used for the results, all 46 of the HMM's correct alarms came 1–2 laps <em>before</em> the stop and none on or after it. The timing chart pairs alarms differently (hence 42), but it also shows no late hits. So the alarm-after-the-pit problem from the tyre-age bug (see <a href="#limitations">Limitations</a>) is gone.</p>
+
+    <h3>Why the HMM misses (2020, ±2 laps)</h3>
+    <p class="small muted">The groups overlap, so they do not add up to the totals.</p>
+    <div class="grid why">
+      <div class="card whycard fa"><p class="why-num">186<span>/ 306</span></p><p class="why-title">False alarms in the final stint</p><p>Tyres wear out near the flag but are not changed. The biggest single cause of false alarms.</p></div>
+      <div class="card whycard fa"><p class="why-num">120<span>/ 306</span></p><p class="why-title">False alarms &gt;2 laps from any stop</p><p>In an earlier stint: timing off by more than the window, or a stop the team chose to delay.</p></div>
+      <div class="card whycard ms"><p class="why-num">164<span>/ 469</span></p><p class="why-title">Misses after a short stint</p><p>Fewer than 15 kept laps: too early for wear to show; usually strategy, damage or an interruption.</p></div>
+      <div class="card whycard ms"><p class="why-num">138<span>/ 469</span></p><p class="why-title">Misses on a "pack" lap</p><p>Five or more drivers pit on the same lap: safety car, red flag or a weather change, which our data cannot flag.</p></div>
+      <div class="card whycard ms"><p class="why-num">28<span>/ 469</span></p><p class="why-title">Misses after a long stint</p><p>More than 35 kept laps: hard-compound stints that outlast the 40-lap scale.</p></div>
+    </div>
+    <p>We cannot split the rest into undercuts or wet races without track-status and weather data.</p>
+
+    <h3>False alarms in the final stint, every model</h3>
+    <p>About a third of stints end at the finish, not in the pits, so an alarm late in the final stint can never be correct. Counted from the race-explorer file: alarms in each driver's last stint with no real pit within ±2 laps.</p>
+    <div class="table-wrap" id="final-stint-table"><p class="loading" style="padding:12px">Loading…</p></div>
   </div>
-
-  <h3>Other limitations</h3>
-  <ul>
-    <li><strong>No tyre compounds.</strong> Softs and hards wear at very different rates; one model and one "40-lap" scale must cover both.</li>
-    <li><strong>No safety-car or weather flags.</strong> Many stops happen because a safety car makes them cheap, not because tyres are worn. We can't remove those laps or races cleanly.</li>
-    <li><strong>Pit laps are a noisy label.</strong> Strategy (undercuts, covering a rival, traffic) moves stops by several laps.</li>
-    <li><strong>One test season.</strong> 2020 was unusual (COVID calendar, repeat circuits, 17 races), so results may not carry over to other seasons.</li>
-    <li><strong>Unequal chances.</strong> Logistic regression can raise several alarms per stint; the others raise at most one.</li>
-    <li><strong>Cleaning median uses the whole race</strong> (see Preprocessing).</li>
-    <li><strong>Timing pairs are not limited to the same stint</strong> (see the caveat under Errors).</li>
-    <li><strong>Two proposal checks not done:</strong> no Gaussian mixture model comparison and no check of our HMM against <code>hmmlearn</code>.</li>
-    <li><strong>Unit tests are out of date.</strong> <code>tests/test_pipeline.py</code> imports a helper that was later removed from the pipeline, so the test file does not currently run.</li>
-    <li><strong>Tyre-age threshold at the edge of the grid.</strong> 2019 picked 0.60, the lowest value tried, so a lower threshold might have done better.</li>
-  </ul>
 </section>
 
-<!-- 10. CONCLUSION -->
+<!-- 7. CONCLUSION -->
 <section id="conclusion">
-  <h2><span class="num">10</span>Conclusion</h2>
-  <p class="callout"><strong>No.</strong> Using lap times alone, none of the models predicts the pit lap well, and the HMM does no better than counting laps: F1 = 0.106 at ±2 against 0.107 for the tyre-age rule and 0.085 for logistic regression.</p>
-  <p>The reasons show up in the errors. Many stops are not caused by gradual wear: whole-field stops under interruptions, early stops after short stints, and strategic calls. Meanwhile, the most worn tyres of the race, in the final stint, are never changed. Without tyre compounds and track status, a model sees the same lap-time pattern in all of these cases. The most likely improvements are compound and safety-car data, and predicting a window of laps (the HMM is clearly better at ±3) instead of an exact lap.</p>
-  <p>What we take away: an unsupervised HMM gives an interpretable, causal estimate of tyre state, but the pit lap depends on much more than tyre state, and a symmetric tolerance window can hide models that only react after the fact.</p>
+  <div class="wrap">
+    <h2><span class="num">07</span>Conclusion</h2>
+    <div class="conclusion">
+      <p class="verdict-word">No.</p>
+      <p class="conclusion-lead">Using lap times alone, none of the models predicts the pit lap well, and the HMM does no better than counting laps: F1 = 0.106 at ±2 against 0.107 for the tyre-age rule and 0.085 for logistic regression.</p>
+    </div>
+    <div class="grid three">
+      <div class="card"><p class="lbl">Why</p><p>Many stops are not caused by gradual wear: whole-field stops under interruptions, early stops after short stints, and strategic calls. Meanwhile the most worn tyres of the race, in the final stint, are never changed. Without compounds and track status, a model sees the same lap-time pattern in all of these cases.</p></div>
+      <div class="card"><p class="lbl">What would help</p><p>Compound and safety-car data, and predicting a window of laps instead of an exact lap: the HMM is clearly better at ±3.</p></div>
+      <div class="card"><p class="lbl">What we take away</p><p>An unsupervised HMM gives an interpretable, causal estimate of tyre state, but the pit lap depends on much more than tyre state, and a symmetric tolerance window can hide models that only react after the fact.</p></div>
+    </div>
+  </div>
 </section>
 
-<!-- 11. REPRODUCE -->
+<!-- 8. LIMITATIONS -->
+<section id="limitations">
+  <div class="wrap">
+    <h2><span class="num">08</span>Limitations and what went wrong</h2>
+    <div class="callout bug">
+      <p class="lbl">A bug made our first test results invalid</p>
+      <p>On 28 October 2026 we found that a pandas <code>merge</code> reset the row index, so <strong>tyre age was read from the wrong laps for about 96% of rows</strong>. At the start of each new stint the feature still carried the old stint's high value, so models raised alarms 1–2 laps <em>after</em> a pit. The symmetric ±2 window counted these as correct. About three quarters of logistic regression's correct alarms came from this.</p>
+      <p>We fixed it by counting kept laps within each stint, then re-ran tuning, training and the 2020 test from scratch. <strong>The first 2020 test was invalid.</strong> No setting was chosen by looking at 2020 results, before or after the fix.</p>
+      <p class="small" style="margin-bottom:0">Lesson: a symmetric tolerance window rewards alarms that come <em>after</em> the event. That is why we also report the timing of alarms (see <a href="#errors">Errors</a>).</p>
+      <details>
+        <summary>Pre-fix 2020 F1 at ±2 (invalid, shown only for the record)</summary>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Model</th><th class="num">F1 (invalid)</th></tr></thead>
+            <tbody>
+              <tr><td>Logistic regression</td><td class="num">0.287</td></tr>
+              <tr><td>Tyre-age rule</td><td class="num">0.128</td></tr>
+              <tr><td>HMM</td><td class="num">0.110</td></tr>
+              <tr><td>HMM without tyre age</td><td class="num">0.101</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+
+    <h3>Other limitations</h3>
+    <div class="grid two limits">
+      <div><strong>No tyre compounds.</strong> Softs and hards wear at very different rates; one model and one "40-lap" scale must cover both.</div>
+      <div><strong>No safety-car or weather flags.</strong> Many stops happen because a safety car makes them cheap, not because tyres are worn. We can't remove those laps or races cleanly.</div>
+      <div><strong>Pit laps are a noisy label.</strong> Strategy (undercuts, covering a rival, traffic) moves stops by several laps.</div>
+      <div><strong>One test season.</strong> 2020 was unusual (COVID calendar, repeat circuits, 17 races), so results may not carry over to other seasons.</div>
+      <div><strong>Unequal chances.</strong> Logistic regression can raise several alarms per stint; the others raise at most one.</div>
+      <div><strong>Cleaning median uses the whole race</strong> (see Data → cleaning rules).</div>
+      <div><strong>Timing pairs are not limited to the same stint</strong> (see the caveat under Errors).</div>
+      <div><strong>Two proposal checks not done:</strong> no Gaussian mixture model comparison and no check of our HMM against <code>hmmlearn</code>.</div>
+      <div><strong>Unit tests are out of date.</strong> <code>tests/test_pipeline.py</code> imports a helper that was later removed from the pipeline, so the test file does not currently run.</div>
+      <div><strong>Tyre-age threshold at the edge of the grid.</strong> 2019 picked 0.60, the lowest value tried, so a lower threshold might have done better.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. REPRODUCE -->
 <section id="reproduce">
-  <h2><span class="num">11</span>Reproduce</h2>
-  <pre><code>git clone https://github.com/AceAryan/f1-pitstop-hmm.git
+  <div class="wrap">
+    <h2><span class="num">09</span>Reproduce</h2>
+    <p>Python 3.12.0, pipeline code at commit <a href="https://github.com/AceAryan/f1-pitstop-hmm/commit/7f934e9"><code>7f934e9</code></a> (the tyre-age fix), 2020 test run on 28 October 2026.</p>
+    <details>
+      <summary>Run it yourself</summary>
+      <pre><code>git clone https://github.com/AceAryan/f1-pitstop-hmm.git
 cd f1-pitstop-hmm
 pip install -r requirements.txt
 
@@ -423,62 +518,79 @@ python main.py --preprocess                    # clean laps, build features, spl
 python main.py --tune                          # fit on 2011–2018, choose settings on 2019
 python main.py --train --test_year 2020        # refit on 2011–2019 with the 2019 settings
 python main.py --evaluate --test_year 2020     # one-time test on 2020</code></pre>
-  <p><strong>Data:</strong> the four Kaggle CSVs are already in <code>data/kaggle/</code>. To refresh them, download the <a href="https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020">Kaggle dataset</a> and copy <code>races.csv</code>, <code>lap_times.csv</code>, <code>pit_stops.csv</code> and <code>results.csv</code> into <code>data/kaggle/</code>.</p>
-  <p><strong>Outputs:</strong> <code>results/evaluation_pooled_summary.csv</code>, <code>results/prediction_timing_deltas.csv</code> and two JSON files in <code>results/site-data/</code>. The <code>results/</code> folder is not committed; the copies this site reads are in <code>docs/data/</code>.</p>
-  <h3>Rebuild this website</h3>
-  <pre><code>bash docs/tools/update_site_data.sh     # copy results into docs/data and drop the placeholder flag
+      <p><strong>Data:</strong> the four Kaggle CSVs are already in <code>data/kaggle/</code>. To refresh them, download the <a href="https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020">Kaggle dataset</a> and copy <code>races.csv</code>, <code>lap_times.csv</code>, <code>pit_stops.csv</code> and <code>results.csv</code> into <code>data/kaggle/</code>.</p>
+      <p><strong>Outputs:</strong> <code>results/evaluation_pooled_summary.csv</code>, <code>results/prediction_timing_deltas.csv</code> and two JSON files in <code>results/site-data/</code>. The <code>results/</code> folder is not committed; the copies this site reads are in <code>docs/data/</code>.</p>
+    </details>
+    <details>
+      <summary>Rebuild this website</summary>
+      <pre><code>bash docs/tools/update_site_data.sh     # copy results into docs/data and drop the placeholder flag
 python -m http.server -d docs 8000      # preview at http://localhost:8000</code></pre>
-  <p class="small muted">The site is plain HTML, CSS and JavaScript in <code>docs/</code> with no build step. Open it through a web server (as above, or GitHub Pages), not by double-clicking the file, because browsers block loading data files from disk.</p>
-  <p class="small"><strong>Final results:</strong> Python 3.12.0, pipeline code at commit <a href="https://github.com/AceAryan/f1-pitstop-hmm/commit/7f934e9"><code>7f934e9</code></a> (the tyre-age fix), 2020 test run on 28 October 2026.</p>
+      <p class="small muted">The site is plain HTML, CSS and JavaScript in <code>docs/</code> with no build step. Open it through a web server (as above, or GitHub Pages), not by double-clicking the file, because browsers block loading data files from disk.</p>
+    </details>
+  </div>
 </section>
 
-<!-- 12. TEAM + AI -->
+<!-- 10. TEAM + AI -->
 <section id="team">
-  <h2><span class="num">12</span>Team, AI use and references</h2>
-  <div class="grid two">
-    <div class="card"><h3>D A S K R Manognya</h3><p class="muted small">24110097</p><p class="small"><strong>Website and presentation.</strong></p><ul class="small">
-      <li>Designed and built this site (HTML, CSS, JavaScript, no libraries) and set it up on GitHub Pages.</li>
-      <li>Interactive parts: the 2019 threshold explorer, results table and chart, race explorer and timing chart.</li>
-      <li>Placeholder-data and data-copy scripts that turn the pipeline outputs into site data.</li>
-      <li>Wrote the report text: question, data, method and evaluation sections, limitations.</li>
-    </ul></div>
-    <div class="card"><h3>Aryan Kumar</h3><p class="muted small">24110055</p><p class="small"><strong>Models and pipeline.</strong></p><ul class="small">
-      <li>Data loading (FastF1, then Kaggle/Ergast), lap cleaning, stint inference and the per-lap features.</li>
-      <li>Gaussian HMM from scratch (forward–backward, Viterbi, Baum–Welch, forward filtering) and the three baselines.</li>
-      <li>Season split, 2019 tuning, one-time 2020 test, pooled matching metrics and the JSON exports for the site.</li>
-      <li>Found and fixed the tyre-age index bug, then re-ran the full pipeline.</li>
-    </ul></div>
+  <div class="wrap">
+    <h2><span class="num">10</span>Team, AI use and references</h2>
+    <div class="grid two">
+      <div class="card person"><p class="person-role">Website and presentation</p><h3>D A S K R Manognya</h3><p class="muted small">24110097</p><ul class="small">
+        <li>Designed and built this site (HTML, CSS, JavaScript, no libraries) and set it up on GitHub Pages.</li>
+        <li>Interactive parts: the 2019 threshold explorer, results table and chart, race explorer and timing chart.</li>
+        <li>Placeholder-data and data-copy scripts that turn the pipeline outputs into site data.</li>
+        <li>Wrote the report text: question, data, method and evaluation sections, limitations.</li>
+      </ul></div>
+      <div class="card person"><p class="person-role">Models and pipeline</p><h3>Aryan Kumar</h3><p class="muted small">24110055</p><ul class="small">
+        <li>Data loading (FastF1, then Kaggle/Ergast), lap cleaning, stint inference and the per-lap features.</li>
+        <li>Gaussian HMM from scratch (forward–backward, Viterbi, Baum–Welch, forward filtering) and the three baselines.</li>
+        <li>Season split, 2019 tuning, one-time 2020 test, pooled matching metrics and the JSON exports for the site.</li>
+        <li>Found and fixed the tyre-age index bug, then re-ran the full pipeline.</li>
+      </ul></div>
+    </div>
+    <p class="small">The work was split equally. Both of us wrote the proposal, chose the question and baselines, read the final results together and can explain any part of the project.</p>
+
+    <div class="split">
+      <div>
+        <h3>AI-use disclosure</h3>
+        <ul class="small">
+          <li><strong>Website:</strong> the HTML, CSS and JavaScript of this site, the placeholder-data script and the data-copy script were drafted with Claude (Anthropic) from our project notes, then reviewed and edited by us. The ML pipeline was not changed in that step.</li>
+          <li><strong>Report text from the final results:</strong> the Results, Race explorer, Errors and Conclusion text, the 2-state diagram and the counts in the errors section were drafted with Claude Code (Anthropic) from the files in <code>results/</code>, with every number recomputed from those files. The ML pipeline was not changed.</li>
+          <li><strong>Site redesign:</strong> the page layout and styling were reworked with Claude Code (Anthropic). No number on the page was changed.</li>
+          <li><strong>Pipeline code:</strong> an AI coding agent was used while writing and debugging the pipeline (the "Agent host session" commits in the git history, 4–28 October 2026): feature building, evaluation, the season split, the Kaggle loader and the tyre-age fix. We checked its output by reading the diffs and re-running the pipeline end to end.</li>
+        </ul>
+        <p class="small">Every result on this page comes from the pipeline output files, not from hand-typed or AI-generated numbers. Each of us can explain any part of the project in the viva.</p>
+      </div>
+      <div>
+        <h3>References</h3>
+        <ul class="small refs">
+          <li>Rao, R. <em>Formula 1 World Championship (1950–2020)</em>. Kaggle dataset. <a href="https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020">kaggle.com/datasets/rohanrao/…</a></li>
+          <li>Ergast Developer API (motor-racing data). <a href="https://ergast.com/mrd/">ergast.com/mrd</a></li>
+          <li>Rabiner, L. R. (1989). A tutorial on hidden Markov models and selected applications in speech recognition. <em>Proceedings of the IEEE</em>, 77(2), 257–286.</li>
+          <li>Pedregosa, F. et al. (2011). Scikit-learn: Machine learning in Python. <em>JMLR</em>, 12, 2825–2830.</li>
+          <li>Virtanen, P. et al. (2020). SciPy 1.0. <em>Nature Methods</em>, 17, 261–272 (used for one-to-one alarm matching).</li>
+          <li>Harris, C. R. et al. (2020). Array programming with NumPy. <em>Nature</em>, 585, 357–362.</li>
+          <li>McKinney, W. (2010). Data structures for statistical computing in Python. <em>Proc. 9th Python in Science Conference</em>, 56–61 (pandas).</li>
+          <li>Hunter, J. D. (2007). Matplotlib: A 2D graphics environment. <em>Computing in Science &amp; Engineering</em>, 9(3), 90–95.</li>
+          <li>FastF1 (Python package, used in our first data pipeline). <a href="https://github.com/theOehrly/Fast-F1">github.com/theOehrly/Fast-F1</a></li>
+        </ul>
+      </div>
+    </div>
   </div>
-  <p class="small">The work was split equally. Both of us wrote the proposal, chose the question and baselines, read the final results together and can explain any part of the project.</p>
-
-  <h3>AI-use disclosure</h3>
-  <ul>
-    <li><strong>Website:</strong> the HTML, CSS and JavaScript of this site, the placeholder-data script and the data-copy script were drafted with Claude (Anthropic) from our project notes, then reviewed and edited by us. The ML pipeline was not changed in that step.</li>
-    <li><strong>Report text from the final results:</strong> the Results, Race explorer, Errors and Conclusion text, the 2-state diagram and the counts in the errors table were drafted with Claude Code (Anthropic) from the files in <code>results/</code>, with every number recomputed from those files. The ML pipeline was not changed.</li>
-    <li><strong>Pipeline code:</strong> an AI coding agent was used while writing and debugging the pipeline (the "Agent host session" commits in the git history, 4–28 October 2026): feature building, evaluation, the season split, the Kaggle loader and the tyre-age fix. We checked its output by reading the diffs and re-running the pipeline end to end.</li>
-  </ul>
-  <p class="small">Every result on this page comes from the pipeline output files, not from hand-typed or AI-generated numbers. Each of us can explain any part of the project in the viva.</p>
-
-  <h3>References</h3>
-  <ul class="small">
-    <li>Rao, R. <em>Formula 1 World Championship (1950–2020)</em>. Kaggle dataset. <a href="https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020">kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020</a></li>
-    <li>Ergast Developer API (motor-racing data). <a href="https://ergast.com/mrd/">ergast.com/mrd</a></li>
-    <li>Rabiner, L. R. (1989). A tutorial on hidden Markov models and selected applications in speech recognition. <em>Proceedings of the IEEE</em>, 77(2), 257–286.</li>
-    <li>Pedregosa, F. et al. (2011). Scikit-learn: Machine learning in Python. <em>JMLR</em>, 12, 2825–2830.</li>
-    <li>Virtanen, P. et al. (2020). SciPy 1.0. <em>Nature Methods</em>, 17, 261–272 (used for one-to-one alarm matching).</li>
-    <li>Harris, C. R. et al. (2020). Array programming with NumPy. <em>Nature</em>, 585, 357–362.</li>
-    <li>McKinney, W. (2010). Data structures for statistical computing in Python. <em>Proc. 9th Python in Science Conference</em>, 56–61 (pandas).</li>
-    <li>Hunter, J. D. (2007). Matplotlib: A 2D graphics environment. <em>Computing in Science &amp; Engineering</em>, 9(3), 90–95.</li>
-    <li>FastF1 (Python package, used in our first data pipeline). <a href="https://github.com/theOehrly/Fast-F1">github.com/theOehrly/Fast-F1</a></li>
-  </ul>
 </section>
 
 </main>
 
 <footer>
-  <div class="wrap">ES 335 Machine Learning, IIT Gandhinagar, 2026 · <a href="https://github.com/AceAryan/f1-pitstop-hmm">GitHub</a></div>
+  <div class="wrap foot">
+    <span>Predicting F1 pit stops with an HMM</span>
+    <span>D A S K R Manognya · Aryan Kumar</span>
+    <span>ES 335 Machine Learning, IIT Gandhinagar, 2026</span>
+    <span>Data: Ergast via Kaggle, CC0</span>
+    <a href="https://github.com/AceAryan/f1-pitstop-hmm">GitHub</a>
+  </div>
 </footer>
 
-<script src="assets/app.js?v=5"></script>
+<script src="assets/app.js?v=6"></script>
 </body>
 </html>

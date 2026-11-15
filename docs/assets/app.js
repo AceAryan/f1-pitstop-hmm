@@ -535,7 +535,35 @@
       if (e.key === 'ArrowRight') { stop(); step(1); }
       if (e.key === 'ArrowLeft') { stop(); step(-1); }
     });
-    fillDrivers();
+    // Jump to a race, driver and lap (used by the quick-pick cards and the initial view).
+    const picks = [...document.querySelectorAll('.pick[data-race]')];
+    function jumpTo(raceName, driverId, lap) {
+      stop();
+      const ri = explorer.races.findIndex((r) => r.grandPrix === raceName);
+      if (ri < 0) return false;
+      raceSel.value = String(ri);
+      fillDrivers();
+      if (driverId && race.drivers.some((d) => d.driver === driverId)) {
+        drvSel.value = driverId;
+        setDriver(true);
+      }
+      lapIn.value = lap ? Math.min(+lapIn.max, Math.max(+lapIn.min, +lap)) : lapIn.max;
+      render();
+      picks.forEach((p) => p.setAttribute('aria-pressed', String(p.dataset.race === raceName && p.dataset.driver === drvSel.value)));
+      return true;
+    }
+    picks.forEach((p) => p.addEventListener('click', () => jumpTo(p.dataset.race, p.dataset.driver, p.dataset.lap)));
+    const clearPicks = () => picks.forEach((p) => p.setAttribute('aria-pressed', 'false'));
+    raceSel.addEventListener('change', clearPicks);
+    drvSel.addEventListener('change', clearPicks);
+
+    // Open on an interesting race, fully drawn, instead of an empty lap 1.
+    const first = picks[0];
+    if (!(first && jumpTo(first.dataset.race, first.dataset.driver, first.dataset.lap))) {
+      fillDrivers();
+      lapIn.value = lapIn.max;
+      render();
+    }
     return render;
   }
 
